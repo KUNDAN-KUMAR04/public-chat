@@ -1,7 +1,8 @@
 {
-  "name": "Ultra Max Chat",
+  "name": "Ultra Max Global Chat",
   "short_name": "UMChat",
-  "start_url": ".",
+  "description": "High-performance threaded chat for all devices.",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#f0f2f5",
   "theme_color": "#0084ff",

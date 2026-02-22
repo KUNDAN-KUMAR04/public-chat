@@ -47,13 +47,11 @@ input, textarea {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 20px;
     animation: fadeIn 0.5s ease;
-    transition: opacity 0.6s ease;
-}
-
-.gate-container.hidden {
-    opacity: 0;
-    pointer-events: none;
+    transform: translateY(0);
+    transition: transform 0.8s ease;
+    will-change: transform;
 }
 
 .gate-content {
@@ -84,6 +82,13 @@ input, textarea {
     font-weight: 500;
     transition: all 0.3s ease;
     backdrop-filter: blur(10px);
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.tier:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.02);
 }
 
 .tier:active {

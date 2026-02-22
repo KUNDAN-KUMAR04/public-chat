@@ -8,174 +8,176 @@
     <meta name="theme-color" content="#0084ff">
     <link rel="manifest" href="manifest.json">
     <title>Ultra Max Global</title>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=default%2Ces2015%2Ces2016%2Ces2017"></script>
-
+    
     <style>
         :root { --primary: #0084ff; --bg: #f0f2f5; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: -apple-system, sans-serif; }
         body { margin: 0; background: var(--bg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-        /* NAV & STATS */
+        /* --- ENTRY GATE UI --- */
+        #gate { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--primary); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 20px; transition: 0.5s; }
+        .opt { background: rgba(255,255,255,0.2); width: 100%; max-width: 320px; padding: 20px; border-radius: 15px; margin: 10px; cursor: pointer; border: 1px solid rgba(255,255,255,0.4); }
+        .opt:hover { background: rgba(255,255,255,0.3); }
+
+        /* --- NAVIGATION & CHAT --- */
         .nav { height: 60px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; padding: 20px 15px 5px; z-index: 100; }
-        .lvl { font-size: 10px; font-weight: bold; padding: 3px 10px; border-radius: 12px; color: white; }
-        .lvl-n { background: #4caf50; }
-        .lvl-m { background: #f44336; }
+        #chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; }
+        .bubble { background: #fff; padding: 12px; border-radius: 18px; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 10px; position: relative; }
+        .my { align-self: flex-end; background: var(--primary); color: white; }
 
-        /* CHAT WINDOW */
-        #chat { flex: 1; overflow-y: auto; padding: 15px; -webkit-overflow-scrolling: touch; }
-        .bubble { background: #fff; padding: 12px; border-radius: 18px; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 10px; position: relative; cursor: pointer; }
-        .my { align-self: flex-end; background: var(--primary); color: white; margin-left: auto; }
-        .img-msg { width: 100%; border-radius: 12px; margin-top: 5px; display: block; }
-        
-        /* CONTEXT MENU */
-        #menu { display: none; position: fixed; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.2); border-radius: 12px; z-index: 2000; width: 150px; overflow: hidden; }
+        /* --- LITE SPACE SPECIFIC (JioPhone) --- */
+        .space-lite .bubble { border-radius: 4px; border: 1px solid #000; max-width: 95%; font-size: 13px; }
+        .space-lite .my { background: #e1ffc7; color: #000; }
+        .space-lite .nav { height: 45px; background: #004a99; }
+
+        /* --- CONTEXT MENU --- */
+        #menu { display: none; position: fixed; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.2); border-radius: 12px; z-index: 2000; width: 150px; }
         .m-item { padding: 12px; font-size: 14px; border-bottom: 1px solid #eee; cursor: pointer; }
-        .m-item:hover { background: #f0f2f5; }
 
-        /* INPUT BAR */
+        /* --- INPUT BAR --- */
         .bar { background: #fff; padding: 10px; border-top: 1px solid #ddd; display: flex; align-items: center; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
         #m-in { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 10px 15px; font-size: 16px; outline: none; }
-        .prog { height: 3px; background: var(--primary); width: 0%; position: fixed; bottom: 60px; transition: 0.2s; }
-
-        /* SIDEBAR */
-        #side { position: fixed; top: 0; right: -280px; width: 270px; height: 100%; background: #fff; transition: 0.3s; z-index: 1000; padding: 20px; box-shadow: -3px 0 10px rgba(0,0,0,0.1); }
-        #side.open { right: 0; }
+        .img-msg { width: 100%; border-radius: 12px; margin-top: 5px; cursor: pointer; }
     </style>
 </head>
 <body id="b">
 
-    <div class="nav">
-        <div id="status" class="lvl lvl-n">LEVEL: NORMAL</div>
-        <div id="p-btn" style="cursor:pointer; font-size:22px;">📌 <span id="p-count" style="font-size:12px">0</span></div>
+    <div id="gate">
+        <h1 style="margin-bottom:5px;">ULTRA MAX</h1>
+        <p style="margin-bottom:20px; opacity:0.8;">Select your device experience</p>
+        <div class="opt" onclick="enterSpace('MAX')"><b>💎 MAX SPACE</b><br><small>5G / iPhone / PC</small></div>
+        <div class="opt" onclick="enterSpace('SMART')"><b>📱 SMART SPACE</b><br><small>Android 9-12 / Budget</small></div>
+        <div class="opt" onclick="enterSpace('LITE')"><b>⚡ LITE SPACE</b><br><small>JioPhone / Keypad</small></div>
     </div>
 
-    <div id="side">
-        <h3>Special Box</h3>
-        <hr><div id="p-list"></div>
+    <div class="nav">
+        <div id="status" style="font-size:12px; font-weight:bold;">CONNECTING...</div>
+        <div id="p-btn" style="cursor:pointer;">📌 <span id="p-count">0</span></div>
     </div>
 
     <div id="chat"></div>
-    <div id="prog" class="prog"></div>
-
     <div id="menu">
         <div class="m-item" id="m-fwd">🚀 Forward</div>
-        <div class="m-item" id="m-pin">📌 Pin</div>
+        <div class="m-item" id="m-pin">📌 Pin Msg</div>
         <div class="m-item" id="m-shr">📤 Share</div>
     </div>
 
     <div class="bar">
         <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; border-bottom:1px solid #ddd; margin-right:5px;">
-        <label style="cursor:pointer; font-size:20px; margin-right:8px;">📷<input type="file" id="f-in" style="display:none"></label>
+        <label style="cursor:pointer; font-size:22px; margin-right:10px;">📷<input type="file" id="f-in" style="display:none"></label>
         <input id="m-in" type="text" placeholder="Message...">
-        <button id="s-btn" style="background:var(--primary); color:white; border:none; border-radius:50%; width:35px; height:35px; margin-left:5px;">➔</button>
+        <button id="s-btn" style="background:var(--primary); color:white; border:none; border-radius:50%; width:40px; height:40px; margin-left:5px;">➔</button>
     </div>
 
     <script type="module">
         import { firebaseConfig } from './config.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const st = getStorage(app);
-        let sel = null;
+        let currentSpace = 'MAX';
+        let selData = null;
 
-        // 1. SELECTORS & LISTENERS
-        const chat = document.getElementById('chat');
-        const mIn = document.getElementById('m-in');
-        const uIn = document.getElementById('u-in');
-        
-        document.getElementById('s-btn').addEventListener('click', sendMsg);
-        document.getElementById('p-btn').addEventListener('click', () => document.getElementById('side').classList.toggle('open'));
-        window.addEventListener('click', () => document.getElementById('menu').style.display='none');
-
-        // 2. IMAGE COMPRESS & UPLOAD (Bridge Mode)
-        document.getElementById('f-in').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if(!file) return;
-            
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = (ev) => {
-                const img = new Image();
-                img.src = ev.target.result;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const scale = 800 / img.width;
-                    canvas.width = 800; canvas.height = img.height * scale;
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    
-                    canvas.toBlob((blob) => {
-                        const sRef = ref(st, 'u/' + Date.now() + '.jpg');
-                        const task = uploadBytesResumable(sRef, blob);
-                        task.on('state_changed', (s) => {
-                            document.getElementById('prog').style.width = (s.bytesTransferred/s.totalBytes)*100 + "%";
-                        }, null, async () => {
-                            const url = await getDownloadURL(task.snapshot.ref);
-                            addDoc(collection(db, "messages"), { user: uIn.value||"Guest", img: url, createdAt: serverTimestamp() });
-                            document.getElementById('prog').style.width = "0%";
-                        });
-                    }, 'image/jpeg', 0.7);
-                };
-            };
-        });
-
-        // 3. SEND & PIN LOGIC
-        async function sendMsg() {
-            if(!mIn.value.trim()) return;
-            await addDoc(collection(db, "messages"), { user: uIn.value||"Guest", txt: mIn.value, createdAt: serverTimestamp() });
-            mIn.value = "";
-        }
-
-        window.pin = async (t) => {
-            await addDoc(collection(db, "pinned"), { text: t, by: uIn.value||"Guest" });
+        // --- GATE LOGIC ---
+        window.enterSpace = (s) => {
+            currentSpace = s;
+            document.body.className = 'space-' + s.toLowerCase();
+            document.getElementById('gate').style.opacity = '0';
+            setTimeout(() => document.getElementById('gate').style.display = 'none', 500);
+            document.getElementById('status').innerText = s + " SPACE ACTIVE";
         };
 
-        // 4. RENDERING & CONTEXT MENU
+        // --- MESSAGE SENDING ---
+        async function send() {
+            const m = document.getElementById('m-in');
+            if(!m.value.trim()) return;
+            await addDoc(collection(db, "messages"), {
+                user: document.getElementById('u-in').value || "Guest",
+                txt: m.value,
+                createdAt: serverTimestamp()
+            });
+            m.value = "";
+        }
+        document.getElementById('s-btn').onclick = send;
+        document.getElementById('m-in').onkeydown = (e) => { if(e.keyCode === 13) send(); };
+
+        // --- FILE BRIDGE (WhatsApp Style) ---
+        document.getElementById('f-in').onchange = async (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            document.getElementById('m-in').placeholder = "Uploading...";
+            
+            const sRef = ref(st, 'uploads/' + Date.now() + "_" + file.name);
+            const task = uploadBytesResumable(sRef, file);
+            
+            task.on('state_changed', null, null, async () => {
+                const url = await getDownloadURL(task.snapshot.ref);
+                await addDoc(collection(db, "messages"), {
+                    user: document.getElementById('u-in').value || "Guest",
+                    file: url,
+                    fileName: file.name,
+                    isImg: file.type.startsWith('image/'),
+                    createdAt: serverTimestamp()
+                });
+                document.getElementById('m-in').placeholder = "Message...";
+            });
+        };
+
+        // --- DOWNLOAD TO DEVICE ---
+        window.save = async (url, name) => {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name || "UM_Download";
+            a.click();
+        };
+
+        // --- RENDERING ENGINE ---
         onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snap) => {
+            const chat = document.getElementById('chat');
             chat.innerHTML = "";
             snap.forEach(d => {
                 const data = d.data();
                 const div = document.createElement('div');
-                div.className = `bubble ${data.user === uIn.value ? 'my' : ''}`;
+                div.className = `bubble ${data.user === document.getElementById('u-in').value ? 'my' : ''}`;
                 
-                if(data.img) div.innerHTML = `<img src="${data.img}" class="img-msg" onclick="save('${data.img}')">`;
-                else div.innerHTML = `<b>${data.user}:</b> ${data.txt}`;
-                
-                // Double Click / Right Click Menu
+                if(data.file) {
+                    if(data.isImg && currentSpace !== 'LITE') {
+                        div.innerHTML = `<img src="${data.file}" class="img-msg" onclick="save('${data.file}', '${data.fileName}')">`;
+                    } else {
+                        div.innerHTML = `<div style="padding:10px; background:rgba(0,0,0,0.05); border-radius:8px;">
+                            📄 ${data.fileName}<br><button onclick="save('${data.file}', '${data.fileName}')" style="margin-top:5px; width:100%;">DOWNLOAD</button>
+                        </div>`;
+                    }
+                } else {
+                    div.innerHTML = `<b>${data.user}:</b> ${data.txt}`;
+                }
+
+                // Context Menu Triggers
                 div.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    sel = data;
-                    const m = document.getElementById('menu');
-                    m.style.display = 'block'; m.style.left = e.pageX + 'px'; m.style.top = e.pageY + 'px';
+                    e.preventDefault(); selData = data;
+                    const menu = document.getElementById('menu');
+                    menu.style.display = 'block'; menu.style.left = e.pageX + 'px'; menu.style.top = e.pageY + 'px';
                 };
-                
+                div.ondblclick = div.oncontextmenu;
+
                 chat.appendChild(div);
             });
             chat.scrollTop = chat.scrollHeight;
         });
 
-        // 5. DOWNLOAD TO DEVICE (The Bridge)
-        window.save = async (url) => {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = "UM_File.jpg";
-            a.click();
-        };
+        // --- CONTEXT ACTIONS ---
+        document.getElementById('m-fwd').onclick = () => document.getElementById('m-in').value = "FWD: " + (selData.txt || selData.fileName);
+        document.getElementById('m-pin').onclick = async () => await addDoc(collection(db, "pinned"), { text: selData.txt || selData.fileName });
+        document.getElementById('m-shr').onclick = () => navigator.share({ text: selData.txt, url: selData.file });
+        window.onclick = () => document.getElementById('menu').style.display = 'none';
 
-        // Context Item Actions
-        document.getElementById('m-fwd').onclick = () => mIn.value = "FWD: " + (sel.txt || "Image");
-        document.getElementById('m-pin').onclick = () => pin(sel.txt || "Image");
-        document.getElementById('m-shr').onclick = () => navigator.share({ text: sel.txt, url: sel.img });
-
-        // Stats
-        onSnapshot(collection(db, "pinned"), s => {
-            document.getElementById('p-count').innerText = s.size;
-            document.getElementById('p-list').innerHTML = s.docs.map(p => `<div style="padding:10px; background:#fff9c4; margin-bottom:5px; border-radius:8px;">${p.data().text}</div>`).join('');
-        });
+        // --- SERVICE WORKER ---
+        if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
     </script>
 </body>
 </html>

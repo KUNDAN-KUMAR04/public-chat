@@ -3,120 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Chat System</title>
+    <title>Ultra Max Global Chat</title>
     <style>
-        body { font-family: -apple-system, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f0f2f5; }
-        
-        /* Feature: Responsive Pinned Box */
-        #pinned-box { background: #fff9c4; border-bottom: 1px solid #fbc02d; padding: 10px; z-index: 1000; cursor: pointer; }
-        #p-list { display: none; font-size: 14px; margin-top: 8px; max-height: 120px; overflow-y: auto; border-top: 1px dashed #fbc02d; padding-top: 5px; }
-        
-        /* Feature: Main Chat Area */
-        #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
-        .bubble { padding: 10px 15px; border-radius: 18px; max-width: 85%; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; font-size: 16px; }
-        .my-msg { align-self: flex-end; background: #0084ff; color: white; border-bottom-right-radius: 2px; }
-        .user-label { font-size: 11px; font-weight: bold; margin-bottom: 4px; display: block; opacity: 0.7; }
-        
-        /* Feature: Multi-Emoji Reaction Bar */
-        .reaction-bar { display: flex; gap: 4px; margin-top: 8px; overflow-x: auto; scrollbar-width: none; }
-        .reaction-bar::-webkit-scrollbar { display: none; }
-        .reaction-btn { background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 2px 6px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 3px; }
-        .my-msg .reaction-btn { background: rgba(255,255,255,0.2); color: white; border-color: rgba(255,255,255,0.2); }
+        :root { --primary: #0084ff; --pin: #fbc02d; --bg: #f0f2f5; }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-        /* Input Area */
+        /* --- TOP COMMAND ZONES --- */
+        #activity-indicator { position: fixed; top: 10px; left: 10px; z-index: 1002; }
+        .level-badge { font-size: 9px; padding: 3px 8px; border-radius: 10px; background: #4caf50; color: white; font-weight: bold; transition: 0.3s; }
+        .pulse { animation: flicker 0.5s; }
+
+        .top-stats { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border: 1px solid #ddd; z-index: 1002; }
+
+        #pin-container { position: fixed; top: 8px; right: 10px; z-index: 1002; cursor: pointer; }
+        #pin-icon { background: var(--pin); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.15); font-size: 18px; }
+        .pin-badge { position: absolute; top: -3px; right: -3px; background: red; color: white; font-size: 9px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; }
+
+        /* --- CHAT & THREADING --- */
+        #messages { flex: 1; overflow-y: auto; padding: 60px 15px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
+        .msg-wrapper { display: flex; flex-direction: column; width: 100%; }
+        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 80%; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); font-size: 15px; position: relative; }
+        .my-msg { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 2px; }
+        .reply-chain { margin-left: 20px; border-left: 2px solid #ccc; padding-left: 10px; margin-top: 4px; }
+        .reply-btn { font-size: 11px; color: #65676b; cursor: pointer; border: none; background: none; text-decoration: underline; padding: 0; margin-top: 5px; }
+
+        /* --- SIDEBAR & INPUT --- */
+        #pinned-sidebar { position: fixed; right: -260px; top: 0; width: 240px; height: 100%; background: white; transition: 0.3s; z-index: 2000; padding: 15px; box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
+        #pinned-sidebar.active { right: 0; }
         .input-area { display: flex; padding: 10px; background: white; border-top: 1px solid #ddd; gap: 8px; }
-        input { border: 1px solid #ccc; border-radius: 20px; padding: 12px; outline: none; font-size: 16px; }
-        #user { width: 70px; flex: none; font-weight: bold; border-color: #0084ff; }
-        #msg { flex: 1; }
-        
+        #msg { flex: 1; border: 1px solid #ccc; border-radius: 20px; padding: 10px 15px; font-size: 16px; outline: none; }
+        #jump-btn { position: fixed; bottom: 80px; right: 20px; background: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; display: none; }
+
+        @keyframes flicker { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
         @media (min-width: 768px) { body { padding: 0 25%; } }
     </style>
 </head>
 <body>
 
-    <div id="pinned-box" onclick="togglePins()">
-        <div style="display:flex; justify-content:space-between">
-            <b>📌 Important Updates (<span id="p-count">0</span>)</b>
-            <span id="p-arrow">▼</span>
-        </div>
+    <div id="activity-indicator"><span id="level-badge" class="level-badge">LEVEL: NORMAL</span></div>
+
+    <div class="top-stats">Wipes: <span id="wipe-ui" style="color:red">0</span></div>
+
+    <div id="pin-container" onclick="toggleSidebar()">
+        <div id="pin-icon">📌</div>
+        <div class="pin-badge" id="pin-badge-count">0</div>
+    </div>
+
+    <div id="pinned-sidebar">
+        <h3 onclick="toggleSidebar()" style="cursor:pointer">✖ CLOSE</h3>
+        <hr>
         <div id="p-list"></div>
     </div>
 
     <div id="messages"></div>
-
-    <div style="text-align:center; padding:5px; font-size:10px; color:#999;">
-        Cloud Status: Active | Global Wipes: <span id="wipe-ui" style="color:red; font-weight:bold">0</span>
-    </div>
+    <button id="jump-btn" onclick="msgDiv.scrollTop = msgDiv.scrollHeight">⬇️</button>
 
     <div class="input-area">
-        <input id="user" type="text" placeholder="Name">
-        <input id="msg" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter') send()">
-        <button onclick="send()" style="border:none; background:#0084ff; color:white; border-radius:50%; width:40px; height:40px; cursor:pointer;">➔</button>
+        <input id="user" type="text" placeholder="Name" style="width:60px;">
+        <input id="msg" type="text" placeholder="Type..." onkeydown="if(event.key==='Enter') send()">
+        <button onclick="send()" style="border:none; background:var(--primary); color:white; border-radius:50%; width:40px; height:40px;">➔</button>
     </div>
 
     <script type="module">
         import { firebaseConfig } from './config.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const emojiList = ['👍','👎','❤️','🧡','💛','💚','💙','💜','🖤','😂','🔥'];
+        const msgDiv = document.getElementById('messages');
+        let replyingToId = null;
 
-        // Toggle Pinned View
-        window.togglePins = () => {
-            const list = document.getElementById('p-list');
-            const arrow = document.getElementById('p-arrow');
-            const isOpen = list.style.display === 'block';
-            list.style.display = isOpen ? 'none' : 'block';
-            arrow.innerText = isOpen ? '▼' : '▲';
-        };
+        // --- LEVEL FLICKER LOGIC ---
+        function triggerFlicker(count) {
+            const badge = document.getElementById('level-badge');
+            badge.classList.add('pulse');
+            setTimeout(() => badge.classList.remove('pulse'), 500);
+            
+            if (count > 150) { badge.innerText = "LEVEL: ULTRA MAX"; badge.style.background = "purple"; }
+            else if (count > 70) { badge.innerText = "LEVEL: MAX"; badge.style.background = "red"; }
+            else { badge.innerText = "LEVEL: NORMAL"; badge.style.background = "#4caf50"; }
+        }
 
-        // Real-time Messages & Reactions
-        onSnapshot(query(collection(db, "messages"), orderBy("createdAt")), (snap) => {
+        // --- CORE SYNC ---
+        onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snap) => {
+            const allDocs = snap.docs;
             const container = document.getElementById('messages');
-            const myName = document.getElementById('user').value;
             container.innerHTML = "";
-            snap.forEach(d => {
-                const data = d.data();
-                const isMe = data.user === myName;
-                
-                let reactionHtml = `<div class="reaction-bar">`;
-                emojiList.forEach(emo => {
-                    const count = data.reactions?.[emo] || 0;
-                    if(count > 0 || ['👍','❤️'].includes(emo)) {
-                        reactionHtml += `<button class="reaction-btn" onclick="react('${d.id}','${emo}')">${emo} <span>${count}</span></button>`;
-                    }
-                });
-                reactionHtml += `</div>`;
-
-                container.innerHTML += `
-                    <div class="bubble ${isMe ? 'my-msg' : ''}">
-                        <span class="user-label">${data.user}</span>
-                        ${data.text}
-                        ${reactionHtml}
-                    </div>`;
+            
+            // Re-render the tree
+            allDocs.filter(d => !d.data().replyTo).forEach(root => {
+                container.innerHTML += renderThread(root, allDocs);
             });
-            container.scrollTop = container.scrollHeight;
+            
+            triggerFlicker(allDocs.length);
+            if (msgDiv.scrollHeight - msgDiv.scrollTop < 1000) msgDiv.scrollTop = msgDiv.scrollHeight;
         });
 
-        // Pinned & Wipe Stats
+        function renderThread(doc, allDocs) {
+            const data = doc.data();
+            const isMe = data.user === document.getElementById('user').value;
+            const replies = allDocs.filter(d => d.data().replyTo === doc.id);
+            let replyHtml = replies.map(r => `<div class="reply-chain">${renderThread(r, allDocs)}</div>`).join('');
+
+            return `<div class="msg-wrapper">
+                <div class="bubble ${isMe ? 'my-msg' : ''}">
+                    <div style="font-size:10px; font-weight:bold; opacity:0.6">${data.user}</div>
+                    ${data.text}
+                    <br><button class="reply-btn" onclick="reply('${doc.id}','${data.user}')">Reply</button>
+                </div>
+                ${replyHtml}
+            </div>`;
+        }
+
+        // --- PINNED DRAWER ---
+        window.toggleSidebar = () => document.getElementById('pinned-sidebar').classList.toggle('active');
         onSnapshot(collection(db, "pinned"), (s) => {
-            document.getElementById('p-count').innerText = s.size;
-            document.getElementById('p-list').innerHTML = s.docs.map(d => `<div style="padding:5px; border-bottom:1px solid #eee"><b>${d.data().user}:</b> ${d.data().text}</div>`).join('');
+            document.getElementById('pin-badge-count').innerText = s.size;
+            document.getElementById('p-list').innerHTML = s.docs.map(d => `<div style="padding:8px; background:#fff9c4; border-radius:5px; margin-bottom:5px; font-size:13px;">${d.data().text}</div>`).join('');
         });
+
+        // --- STATS & SEND ---
         onSnapshot(doc(db, "admin", "stats"), (d) => { if(d.exists()) document.getElementById('wipe-ui').innerText = d.data().wipes; });
 
-        window.send = () => {
+        window.reply = (id, name) => { replyingToId = id; document.getElementById('msg').placeholder = `Replying to ${name}...`; document.getElementById('msg').focus(); };
+        
+        window.send = async () => {
             const val = document.getElementById('msg').value;
             if(!val) return;
-            addDoc(collection(db, "messages"), { user: document.getElementById('user').value || "Guest", text: val, createdAt: serverTimestamp() });
+            await addDoc(collection(db, "messages"), {
+                user: document.getElementById('user').value || "Guest",
+                text: val,
+                createdAt: serverTimestamp(),
+                replyTo: replyingToId
+            });
             document.getElementById('msg').value = "";
+            replyingToId = null;
+            document.getElementById('msg').placeholder = "Type...";
         };
 
-        window.react = (id, emo) => {
-            updateDoc(doc(db, "messages", id), { [`reactions.${emo}`]: increment(1) });
-        };
+        msgDiv.addEventListener('scroll', () => {
+            document.getElementById('jump-btn').style.display = (msgDiv.scrollHeight - msgDiv.scrollTop > 800) ? 'block' : 'none';
+        });
     </script>
 </body>
 </html>

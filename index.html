@@ -8,7 +8,6 @@
     <meta name="theme-color" content="#0084ff">
     <link rel="manifest" href="manifest.json">
     <title>Ultra Max Global</title>
-    
     <script src="https://polyfill.io/v3/polyfill.min.js?features=default%2Ces2015%2Ces2016%2Ces2017"></script>
 
     <style>
@@ -16,155 +15,167 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: -apple-system, sans-serif; }
         body { margin: 0; background: var(--bg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-        /* HEADER */
-        .top-nav { height: 60px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; padding: 20px 15px 5px; z-index: 100; }
+        /* NAV & STATS */
+        .nav { height: 60px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; padding: 20px 15px 5px; z-index: 100; }
         .lvl { font-size: 10px; font-weight: bold; padding: 3px 10px; border-radius: 12px; color: white; }
         .lvl-n { background: #4caf50; }
         .lvl-m { background: #f44336; }
 
-        /* CHAT */
+        /* CHAT WINDOW */
         #chat { flex: 1; overflow-y: auto; padding: 15px; -webkit-overflow-scrolling: touch; }
-        .unit { margin-bottom: 12px; display: flex; flex-direction: column; }
-        .bubble { background: #fff; padding: 12px; border-radius: 18px; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .my { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 4px; }
-        .reply-node { margin-left: 20px; border-left: 2px solid #ddd; padding-left: 10px; margin-top: 5px; }
+        .bubble { background: #fff; padding: 12px; border-radius: 18px; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 10px; position: relative; cursor: pointer; }
+        .my { align-self: flex-end; background: var(--primary); color: white; margin-left: auto; }
+        .img-msg { width: 100%; border-radius: 12px; margin-top: 5px; display: block; }
+        
+        /* CONTEXT MENU */
+        #menu { display: none; position: fixed; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.2); border-radius: 12px; z-index: 2000; width: 150px; overflow: hidden; }
+        .m-item { padding: 12px; font-size: 14px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .m-item:hover { background: #f0f2f5; }
 
-        /* SIDEBAR (PINNED) */
-        #side { position: fixed; top: 0; right: -280px; width: 270px; height: 100%; background: #fff; box-shadow: -3px 0 10px rgba(0,0,0,0.1); transition: transform 0.3s ease; z-index: 1000; padding: 20px; visibility: hidden; }
-        #side.open { transform: translateX(-280px); visibility: visible; }
-
-        /* INPUT */
-        .input-bar { background: #fff; padding: 10px; border-top: 1px solid #ddd; display: flex; align-items: center; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+        /* INPUT BAR */
+        .bar { background: #fff; padding: 10px; border-top: 1px solid #ddd; display: flex; align-items: center; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
         #m-in { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 10px 15px; font-size: 16px; outline: none; }
-        button#send-btn { background: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; margin-left: 8px; cursor: pointer; font-size: 18px; }
+        .prog { height: 3px; background: var(--primary); width: 0%; position: fixed; bottom: 60px; transition: 0.2s; }
+
+        /* SIDEBAR */
+        #side { position: fixed; top: 0; right: -280px; width: 270px; height: 100%; background: #fff; transition: 0.3s; z-index: 1000; padding: 20px; box-shadow: -3px 0 10px rgba(0,0,0,0.1); }
+        #side.open { right: 0; }
     </style>
 </head>
-<body id="main">
+<body id="b">
 
-    <div class="top-nav">
+    <div class="nav">
         <div id="status" class="lvl lvl-n">LEVEL: NORMAL</div>
-        <div style="font-size: 11px; font-weight: bold;">WIPES: <span id="wipe-c">0</span></div>
-        <div id="pin-toggle" style="cursor:pointer; position:relative; font-size:22px;">
-            📌 <span id="p-badge" style="position:absolute; top:-5px; right:-8px; background:red; color:white; font-size:9px; border-radius:50%; width:16px; height:16px; display:flex; align-items:center; justify-content:center;">0</span>
-        </div>
+        <div id="p-btn" style="cursor:pointer; font-size:22px;">📌 <span id="p-count" style="font-size:12px">0</span></div>
     </div>
 
     <div id="side">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3>Special Box</h3>
-            <span id="close-side" style="cursor:pointer; font-size:24px;">×</span>
-        </div>
+        <h3>Special Box</h3>
         <hr><div id="p-list"></div>
     </div>
 
     <div id="chat"></div>
+    <div id="prog" class="prog"></div>
 
-    <div class="input-bar">
-        <input id="u-in" type="text" placeholder="User" style="width:60px; border:none; border-bottom:1px solid #ddd; margin-right:5px;">
+    <div id="menu">
+        <div class="m-item" id="m-fwd">🚀 Forward</div>
+        <div class="m-item" id="m-pin">📌 Pin</div>
+        <div class="m-item" id="m-shr">📤 Share</div>
+    </div>
+
+    <div class="bar">
+        <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; border-bottom:1px solid #ddd; margin-right:5px;">
+        <label style="cursor:pointer; font-size:20px; margin-right:8px;">📷<input type="file" id="f-in" style="display:none"></label>
         <input id="m-in" type="text" placeholder="Message...">
-        <button id="send-btn">➔</button>
+        <button id="s-btn" style="background:var(--primary); color:white; border:none; border-radius:50%; width:35px; height:35px; margin-left:5px;">➔</button>
     </div>
 
     <script type="module">
         import { firebaseConfig } from './config.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const chatBox = document.getElementById('chat');
-        let rTarget = null;
+        const st = getStorage(app);
+        let sel = null;
 
-        // --- FIXED BUTTON LOGIC (Direct Listeners) ---
-        document.getElementById('send-btn').addEventListener('click', sendMessage);
-        document.getElementById('m-in').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendMessage(); });
-        document.getElementById('pin-toggle').addEventListener('click', toggleSidebar);
-        document.getElementById('close-side').addEventListener('click', toggleSidebar);
+        // 1. SELECTORS & LISTENERS
+        const chat = document.getElementById('chat');
+        const mIn = document.getElementById('m-in');
+        const uIn = document.getElementById('u-in');
+        
+        document.getElementById('s-btn').addEventListener('click', sendMsg);
+        document.getElementById('p-btn').addEventListener('click', () => document.getElementById('side').classList.toggle('open'));
+        window.addEventListener('click', () => document.getElementById('menu').style.display='none');
 
-        function toggleSidebar() {
-            document.getElementById('side').classList.toggle('open');
-        }
-
-        async function sendMessage() {
-            const m = document.getElementById('m-in');
-            const u = document.getElementById('u-in');
-            if(!m.value.trim()) return;
+        // 2. IMAGE COMPRESS & UPLOAD (Bridge Mode)
+        document.getElementById('f-in').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
             
-            try {
-                await addDoc(collection(db, "messages"), {
-                    user: u.value || "Guest",
-                    text: m.value,
-                    replyTo: rTarget,
-                    likes: 0,
-                    createdAt: serverTimestamp()
-                });
-                m.value = ""; 
-                rTarget = null; 
-                m.placeholder = "Message...";
-            } catch(e) { console.error("Send failed", e); }
-        }
-
-        // --- REAL-TIME UPDATES ---
-        onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snap) => {
-            chatBox.innerHTML = "";
-            snap.docs.forEach(d => {
-                if(!d.data().replyTo) chatBox.appendChild(createMessageElement(d, snap.docs));
-            });
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
-
-        function createMessageElement(d, all) {
-            const data = d.data();
-            const container = document.createElement('div');
-            container.className = "unit";
-            const isMe = data.user === document.getElementById('u-in').value;
-            
-            const bubble = document.createElement('div');
-            bubble.className = `bubble ${isMe ? 'my' : ''}`;
-            bubble.innerHTML = `<div style="font-size:9px; opacity:0.6">${data.user}</div><div>${data.text}</div>`;
-            
-            // Interaction Bar
-            const actions = document.createElement('div');
-            actions.className = "act";
-            actions.style.display = "flex"; actions.style.gap = "10px"; actions.style.marginTop = "5px"; actions.style.fontSize = "11px";
-            
-            const likeBtn = document.createElement('span');
-            likeBtn.innerHTML = `❤️ ${data.likes || 0}`;
-            likeBtn.style.cursor = "pointer";
-            likeBtn.onclick = () => updateDoc(doc(db, "messages", d.id), { likes: increment(1) });
-            
-            const replyBtn = document.createElement('span');
-            replyBtn.innerText = "Reply";
-            replyBtn.style.cursor = "pointer";
-            replyBtn.onclick = () => { 
-                rTarget = d.id; 
-                document.getElementById('m-in').placeholder = "To " + data.user;
-                document.getElementById('m-in').focus();
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.src = ev.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const scale = 800 / img.width;
+                    canvas.width = 800; canvas.height = img.height * scale;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    canvas.toBlob((blob) => {
+                        const sRef = ref(st, 'u/' + Date.now() + '.jpg');
+                        const task = uploadBytesResumable(sRef, blob);
+                        task.on('state_changed', (s) => {
+                            document.getElementById('prog').style.width = (s.bytesTransferred/s.totalBytes)*100 + "%";
+                        }, null, async () => {
+                            const url = await getDownloadURL(task.snapshot.ref);
+                            addDoc(collection(db, "messages"), { user: uIn.value||"Guest", img: url, createdAt: serverTimestamp() });
+                            document.getElementById('prog').style.width = "0%";
+                        });
+                    }, 'image/jpeg', 0.7);
+                };
             };
+        });
 
-            actions.append(likeBtn, replyBtn);
-            bubble.appendChild(actions);
-            container.appendChild(bubble);
-
-            // Nested Replies
-            all.forEach(r => {
-                if(r.data().replyTo === d.id) {
-                    const replyNode = document.createElement('div');
-                    replyNode.className = "reply-node";
-                    replyNode.appendChild(createMessageElement(r, all));
-                    container.appendChild(replyNode);
-                }
-            });
-
-            return container;
+        // 3. SEND & PIN LOGIC
+        async function sendMsg() {
+            if(!mIn.value.trim()) return;
+            await addDoc(collection(db, "messages"), { user: uIn.value||"Guest", txt: mIn.value, createdAt: serverTimestamp() });
+            mIn.value = "";
         }
 
-        // Stats & Pins
-        onSnapshot(collection(db, "pinned"), s => {
-            document.getElementById('p-badge').innerText = s.size;
-            document.getElementById('p-list').innerHTML = s.docs.map(p => `<div style="background:#fff9c4; padding:10px; margin-bottom:10px; border-radius:8px;">${p.data().text}</div>`).join('');
+        window.pin = async (t) => {
+            await addDoc(collection(db, "pinned"), { text: t, by: uIn.value||"Guest" });
+        };
+
+        // 4. RENDERING & CONTEXT MENU
+        onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snap) => {
+            chat.innerHTML = "";
+            snap.forEach(d => {
+                const data = d.data();
+                const div = document.createElement('div');
+                div.className = `bubble ${data.user === uIn.value ? 'my' : ''}`;
+                
+                if(data.img) div.innerHTML = `<img src="${data.img}" class="img-msg" onclick="save('${data.img}')">`;
+                else div.innerHTML = `<b>${data.user}:</b> ${data.txt}`;
+                
+                // Double Click / Right Click Menu
+                div.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    sel = data;
+                    const m = document.getElementById('menu');
+                    m.style.display = 'block'; m.style.left = e.pageX + 'px'; m.style.top = e.pageY + 'px';
+                };
+                
+                chat.appendChild(div);
+            });
+            chat.scrollTop = chat.scrollHeight;
         });
-        onSnapshot(doc(db, "admin", "stats"), d => { if(d.exists()) document.getElementById('wipe-c').innerText = d.data().wipes; });
+
+        // 5. DOWNLOAD TO DEVICE (The Bridge)
+        window.save = async (url) => {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = "UM_File.jpg";
+            a.click();
+        };
+
+        // Context Item Actions
+        document.getElementById('m-fwd').onclick = () => mIn.value = "FWD: " + (sel.txt || "Image");
+        document.getElementById('m-pin').onclick = () => pin(sel.txt || "Image");
+        document.getElementById('m-shr').onclick = () => navigator.share({ text: sel.txt, url: sel.img });
+
+        // Stats
+        onSnapshot(collection(db, "pinned"), s => {
+            document.getElementById('p-count').innerText = s.size;
+            document.getElementById('p-list').innerHTML = s.docs.map(p => `<div style="padding:10px; background:#fff9c4; margin-bottom:5px; border-radius:8px;">${p.data().text}</div>`).join('');
+        });
     </script>
 </body>
 </html>

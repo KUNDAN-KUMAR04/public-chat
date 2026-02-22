@@ -1,0 +1,31 @@
+:root { --p: #0084ff; --bg: #e5ddd5; --my: #dcf8c6; --other: #ffffff; }
+body { margin: 0; font-family: -apple-system, system-ui, "Apple Color Emoji", "Segoe UI Emoji"; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #000; }
+
+/* Android Emoji Support & Font */
+input, div { font-family: inherit; }
+
+/* THE ENGINE GATE */
+#gate { position: fixed; inset: 0; background: var(--p); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; transition: 0.8s; }
+.tier { background: rgba(255,255,255,0.1); border: 2px solid #fff; padding: 20px; width: 85%; max-width: 320px; margin: 10px; border-radius: 15px; cursor: pointer; text-align: center; font-weight: bold; }
+
+/* TREE STRUCTURE REPLY */
+.tree-container { margin-bottom: 5px; position: relative; padding-left: 10px; }
+.tree-line { position: absolute; left: 0; top: 0; bottom: 10px; width: 2px; background: var(--p); border-radius: 2px; }
+.reply-preview-box { background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px; font-size: 12px; color: #555; border-left: 4px solid var(--p); }
+
+/* CHAT MESSAGES */
+#chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); }
+.msg { max-width: 85%; padding: 10px 15px; border-radius: 18px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-wrap: break-word; }
+.msg.my { align-self: flex-end; background: var(--my); border-bottom-right-radius: 2px; }
+.msg.other { align-self: flex-start; background: var(--other); border-bottom-left-radius: 2px; }
+
+/* MEDIA POPUP (MODAL) */
+#media-pop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+#pop-img { max-width: 100%; max-height: 60%; border-radius: 15px; object-fit: contain; }
+.pop-btn-row { display: flex; gap: 15px; margin-top: 25px; width: 100%; justify-content: center; }
+.btn { padding: 15px 35px; border-radius: 30px; border: none; font-weight: bold; font-size: 16px; cursor: pointer; }
+
+/* SIDEBAR & WIPES */
+#side { position: fixed; top: 0; right: -320px; width: 300px; height: 100%; background: #fff; z-index: 5000; transition: 0.3s; padding: 20px; box-shadow: -5px 0 15px rgba(0,0,0,0.1); }
+#side.open { right: 0; }
+.wipe-btn { background: #ff3b30; color: #fff; width: 100%; margin-top: 20px; padding: 15px; border-radius: 10px; border: none; font-weight: bold; }

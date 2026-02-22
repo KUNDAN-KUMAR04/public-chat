@@ -1,19 +1,18 @@
-const CACHE_NAME = 'umchat-v1';
+const CACHE_NAME = 'umchat-v2';
 
-// 1. Install & Skip Waiting
-// This tells the new version to take over immediately
+// 1. INSTALL: Pre-cache the basic app shell
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  self.skipWaiting(); // Forces the waiting service worker to become the active one immediately
 });
 
-// 2. Activate & Claim Clients
-// This makes the chat work the very first time it's opened
+// 2. ACTIVATE: Claim clients so the app works on the very first load
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(clients.claim()); // Takes control of all open tabs immediately
 });
 
-// 3. The Fetch Engine
-// This keeps the app fast and stable on old/slow connections
+// 3. FETCH: Network-first strategy (Best for Chat)
+// It tries to get the latest messages from the web first, 
+// but falls back to the cache if the user is in a elevator or tunnel.
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request).catch(() => {

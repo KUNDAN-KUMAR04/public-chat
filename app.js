@@ -36,13 +36,10 @@ async function registerServiceWorker() {
 }
 
 // BOOT SYSTEM - Initialize with selected level
+// Using your ORIGINAL approach that worked!
 window.boot = (m) => {
     engineMode = m;
-    document.getElementById('gate').style.opacity = '0';
-    document.getElementById('gate').style.pointerEvents = 'none';
-    setTimeout(() => {
-        document.getElementById('gate').style.display = 'none';
-    }, 500);
+    document.getElementById('gate').style.transform = 'translateY(-100%)';
     startEngine();
     loadPinnedMessages();
 };

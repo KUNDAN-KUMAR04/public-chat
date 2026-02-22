@@ -3,244 +3,443 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Ultra Max Global</title>
+    <title>Ultra Max Global | 2026 Edition</title>
     <style>
-        :root { --primary: #0084ff; --bg: #f0f2f5; --bubble-my: #0084ff; --bubble-other: #ffffff; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: -apple-system, system-ui, sans-serif; }
-        body { margin: 0; background: var(--bg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-
-        /* --- DEVICE SPECIFIC UI --- */
-        #gate { position: fixed; inset: 0; background: var(--primary); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-        .opt { background: rgba(255,255,255,0.1); width: 280px; padding: 20px; border-radius: 15px; margin: 10px; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); text-align: center; backdrop-filter: blur(10px); }
-        
-        .nav { height: 60px; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #ddd; z-index: 100; }
-        #chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
-
-        /* --- THE BUBBLE ENGINE --- */
-        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 85%; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .my { align-self: flex-end; background: var(--bubble-my); color: white; border-bottom-right-radius: 4px; }
-        .other { align-self: flex-start; background: var(--bubble-other); color: #000; border-bottom-left-radius: 4px; }
-        
-        /* Reply UI */
-        .reply-box { font-size: 11px; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 5px; margin-bottom: 5px; border-left: 3px solid var(--primary); }
-        
-        /* Lite Mode Overrides (JioPhone/Low RAM) */
-        .space-lite .bubble { border-radius: 4px; border: 1px solid #ccc; max-width: 95%; font-size: 13px; box-shadow: none; }
-        .space-lite .img-msg { max-height: 150px; object-fit: cover; }
-        
-        /* --- ELEMENTS --- */
-        .bar { background: #fff; padding: 10px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #ddd; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-        #m-in { flex: 1; border-radius: 20px; border: 1px solid #ddd; padding: 10px 15px; outline: none; font-size: 16px; }
-        
-        #side { position: fixed; top: 0; right: -300px; width: 280px; height: 100%; background: #fff; transition: 0.3s; z-index: 1000; padding: 20px; box-shadow: -5px 0 15px rgba(0,0,0,0.1); }
-        #side.open { right: 0; }
-        
-        #menu { display: none; position: fixed; background: #fff; box-shadow: 0 5px 20px rgba(0,0,0,0.2); border-radius: 12px; z-index: 5000; width: 160px; overflow: hidden; }
-        .m-item { padding: 12px 15px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 14px; transition: 0.2s; }
-        .m-item:active { background: #f0f0f0; }
-
-        .prog-bar { position: fixed; top: 0; left: 0; height: 3px; background: #4caf50; width: 0%; transition: 0.2s; z-index: 10001; }
-    </style>
-</head>
-<body id="main">
-
-    <div id="prog" class="prog-bar"></div>
-
-    <div id="gate">
-        <h2 style="margin-bottom:5px;">ULTRA MAX GLOBAL</h2>
-        <p style="opacity:0.7; font-size:12px; margin-bottom:20px;">Optimizing Engine for your Hardware...</p>
-        <div class="opt" onclick="boot('MAX')"><b>💎 MAX SPACE</b><br><small>5G / 8GB+ RAM / HD</small></div>
-        <div class="opt" onclick="enterSmart('SMART')"><b>📱 SMART SPACE</b><br><small>4G / 4GB RAM / Balanced</small></div>
-        <div class="opt" onclick="boot('LITE')"><b>⚡ LITE SPACE</b><br><small>JioPhone / 512MB RAM / Lite</small></div>
-    </div>
-
-    <div class="nav">
-        <div onclick="location.reload()" style="cursor:pointer"><b>UM <span id="mode-tag"></span></b></div>
-        <div id="p-btn" style="cursor:pointer; font-size:20px;">📌 <span id="p-count" style="font-size:12px;">0</span></div>
-    </div>
-
-    <div id="side">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3>Special Box</h3>
-            <button onclick="document.getElementById('side').classList.remove('open')">✕</button>
-        </div>
-        <hr>
-        <div id="p-list"></div>
-    </div>
-
-    <div id="chat"></div>
-
-    <div id="menu">
-        <div class="m-item" id="act-rply">💬 Reply</div>
-        <div class="m-item" id="act-pin">📌 Pin to Box</div>
-        <div class="m-item" id="act-save">📥 Save to Device</div>
-    </div>
-
-    <div class="bar">
-        <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; border-bottom:1px solid #ddd; font-size:12px;">
-        <label style="cursor:pointer; font-size:22px;">📁<input type="file" id="f-in" style="display:none"></label>
-        <div id="r-pre" style="display:none; position:absolute; bottom:70px; left:10px; right:10px; background:#eef; padding:8px; border-radius:10px; font-size:11px; border-left:4px solid var(--primary);"></div>
-        <input id="m-in" type="text" placeholder="Message...">
-        <button id="s-btn" style="background:var(--primary); color:white; border:none; border-radius:50%; width:40px; height:40px; font-weight:bold;">➔</button>
-    </div>
-
-    <script type="module">
-        import { firebaseConfig } from './config.js';
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const st = getStorage(app);
-
-        let config = { space: 'MAX', msgLimit: 100, autoLoadImgs: true };
-        let activeSel = null;
-        let replyData = null;
-
-        // --- THE ENGINE BOOT ---
-        window.boot = (mode) => {
-            config.space = mode;
-            if(mode === 'LITE') { config.msgLimit = 25; config.autoLoadImgs = false; }
-            if(mode === 'SMART') { config.msgLimit = 50; }
-            
-            document.body.className = 'space-' + mode.toLowerCase();
-            document.getElementById('mode-tag').innerText = mode;
-            document.getElementById('gate').style.opacity = '0';
-            setTimeout(() => document.getElementById('gate').style.display = 'none', 600);
-            
-            startSync();
-        };
-
-        // --- DIRECT-TO-DEVICE STORAGE BRIDGE ---
-        window.downloadFile = async (url, name) => {
-            const prog = document.getElementById('prog');
-            prog.style.width = "30%";
-            try {
-                const res = await fetch(url);
-                const blob = await res.blob();
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = name || "UM_File";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                prog.style.width = "100%";
-                setTimeout(() => prog.style.width = "0%", 1000);
-            } catch (e) { window.open(url, '_blank'); }
-        };
-
-        // --- MESSAGE SYNC (Hardware Aware) ---
-        function startSync() {
-            const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(config.msgLimit));
-            onSnapshot(q, (snap) => {
-                const chat = document.getElementById('chat');
-                const msgs = [];
-                snap.forEach(doc => msgs.push({id: doc.id, ...doc.data()}));
-                msgs.reverse();
-
-                chat.innerHTML = "";
-                msgs.forEach(data => {
-                    const bubble = document.createElement('div');
-                    bubble.className = `bubble ${data.user === document.getElementById('u-in').value ? 'my' : 'other'}`;
-                    
-                    let inner = `<small style="opacity:0.6;font-size:10px;">${data.user}</small><br>`;
-                    
-                    if(data.reply) inner += `<div class="reply-box"><b>Replying to:</b><br>${data.reply}</div>`;
-
-                    if(data.file) {
-                        // Logic: Lite users get links to save RAM, others get previews
-                        if(data.isImg && config.autoLoadImgs) {
-                            inner += `<img src="${data.file}" class="img-msg" style="width:100%; border-radius:10px;" onclick="downloadFile('${data.file}', '${data.fileName}')">`;
-                        } else {
-                            inner += `<div style="padding:10px; border:1px dashed #ccc; cursor:pointer;" onclick="downloadFile('${data.file}', '${data.fileName}')">📂 ${data.fileName} <br><small>Click to Download to Device</small></div>`;
-                        }
-                    } else {
-                        inner += `<span>${data.txt}</span>`;
-                    }
-
-                    bubble.innerHTML = inner;
-
-                    // CONTEXT MENU (Long Press / Double Tap)
-                    const triggerMenu = (e) => {
-                        e.preventDefault();
-                        activeSel = data;
-                        const m = document.getElementById('menu');
-                        m.style.display = 'block';
-                        m.style.left = Math.min(e.pageX, window.innerWidth - 160) + 'px';
-                        m.style.top = Math.min(e.pageY, window.innerHeight - 200) + 'px';
-                    };
-                    bubble.oncontextmenu = triggerMenu;
-                    bubble.ondblclick = triggerMenu;
-
-                    chat.appendChild(bubble);
-                });
-                chat.scrollTop = chat.scrollHeight;
-            });
+        :root { 
+            --primary: #0084ff; 
+            --bg: #f0f2f5; 
+            --my-bubble: #0084ff; 
+            --other-bubble: #ffffff;
+            --glass: rgba(255, 255, 255, 0.95);
         }
 
-        // --- UPLOAD ENGINE (Direct Bridge) ---
-        document.getElementById('f-in').onchange = (e) => {
-            const file = e.target.files[0];
-            if(!file) return;
-            const sRef = ref(st, 'u/' + Date.now() + "_" + file.name);
-            const upload = uploadBytesResumable(sRef, file);
-            
-            upload.on('state_changed', (s) => {
-                document.getElementById('prog').style.width = (s.bytesTransferred / s.totalBytes) * 100 + "%";
-            }, null, async () => {
-                const url = await getDownloadURL(upload.snapshot.ref);
-                await addDoc(collection(db, "messages"), {
-                    user: document.getElementById('u-in').value || "Guest",
-                    file: url, fileName: file.name, isImg: file.type.startsWith('image/'),
-                    createdAt: serverTimestamp()
-                });
-                document.getElementById('prog').style.width = "0%";
-            });
-        };
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        
+        body { 
+            margin: 0; 
+            background: var(--bg); 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+        }
 
-        // --- INTERACTION ACTIONS ---
-        document.getElementById('s-btn').onclick = async () => {
-            const input = document.getElementById('m-in');
-            if(!input.value.trim()) return;
+        /* --- HARDWARE SELECTION GATE --- */
+        #gate { 
+            position: fixed; 
+            inset: 0; 
+            background: var(--primary); 
+            z-index: 10000; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            color: white; 
+            text-align: center;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        
+        .gate-content { width: 90%; max-width: 400px; }
+        .opt-card { 
+            background: rgba(255, 255, 255, 0.1); 
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            padding: 20px;
+            margin: 12px 0;
+            cursor: pointer;
+            transition: 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        .opt-card:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-3px); }
+        .opt-card b { display: block; font-size: 18px; margin-bottom: 5px; }
+        .opt-card small { opacity: 0.8; font-size: 12px; }
+
+        /* --- HEADER --- */
+        .header { 
+            height: 65px; 
+            background: #fff; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 0 20px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            z-index: 100;
+        }
+        .header .logo { font-weight: 800; font-size: 20px; color: var(--primary); cursor: pointer; }
+        .header .stats { text-align: center; line-height: 1.2; }
+        .header .stats span { display: block; font-size: 10px; color: #888; text-transform: uppercase; }
+        .header .stats b { font-size: 14px; color: #333; }
+
+        /* --- CHAT ENGINE --- */
+        #chat { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px;
+            background: #e5ddd5; /* Classic chat background texture feel */
+            background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+        }
+
+        .msg { 
+            max-width: 80%; 
+            padding: 10px 14px; 
+            border-radius: 15px; 
+            font-size: 15px; 
+            position: relative; 
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+            animation: slideIn 0.2s ease-out;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .msg.my { align-self: flex-end; background: #dcf8c6; border-bottom-right-radius: 2px; color: #000; }
+        .msg.other { align-self: flex-start; background: #fff; border-bottom-left-radius: 2px; }
+        
+        .msg .user-tag { font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 4px; display: block; }
+        .msg .reply-quote { 
+            background: rgba(0,0,0,0.05); 
+            border-left: 4px solid var(--primary); 
+            padding: 6px; 
+            border-radius: 4px; 
+            margin-bottom: 8px; 
+            font-size: 12px; 
+            color: #555;
+        }
+
+        /* --- MEDIA HANDLING --- */
+        .file-box { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            background: rgba(0,0,0,0.03); 
+            padding: 10px; 
+            border-radius: 10px; 
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        .file-box:hover { background: rgba(0,0,0,0.06); }
+        .img-preview { width: 100%; border-radius: 8px; margin-top: 5px; cursor: pointer; display: block; }
+
+        /* --- SIDEBAR (SPECIAL BOX) --- */
+        #special-box { 
+            position: fixed; 
+            top: 0; 
+            right: -320px; 
+            width: 300px; 
+            height: 100%; 
+            background: #fff; 
+            z-index: 2000; 
+            transition: 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); 
+            box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        #special-box.open { right: 0; }
+        .sb-header { padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .sb-list { flex: 1; overflow-y: auto; padding: 15px; }
+        .pin-item { background: #fdfae6; border: 1px solid #f1e05a; padding: 12px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; }
+
+        /* --- INPUT SYSTEM --- */
+        .input-area { 
+            background: #f0f0f0; 
+            padding: 10px 15px; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
+        }
+        .input-wrapper { flex: 1; background: #fff; border-radius: 25px; padding: 5px 15px; display: flex; align-items: center; border: 1px solid #ddd; }
+        #m-in { flex: 1; border: none; padding: 10px; font-size: 16px; background: transparent; }
+        
+        /* --- CONTEXT MENU --- */
+        #context-menu { 
+            display: none; 
+            position: fixed; 
+            background: var(--glass); 
+            backdrop-filter: blur(15px);
+            border-radius: 15px; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2); 
+            z-index: 5000; 
+            width: 180px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .cm-item { padding: 14px 18px; cursor: pointer; font-size: 14px; border-bottom: 1px solid rgba(0,0,0,0.05); transition: 0.2s; }
+        .cm-item:hover { background: rgba(0,0,0,0.05); }
+
+        /* --- PROGRESS & NOTIFS --- */
+        .loader { position: fixed; top: 0; left: 0; height: 3px; background: #4caf50; width: 0%; z-index: 10001; transition: 0.3s; }
+    </style>
+</head>
+<body>
+
+<div id="loader" class="loader"></div>
+
+<div id="gate">
+    <div class="gate-content">
+        <h1 style="font-size: 40px; margin-bottom: 10px;">ULTRA MAX</h1>
+        <p style="margin-bottom: 30px; opacity: 0.9;">Global 5G Communication Protocol</p>
+        
+        <div class="opt-card" onclick="launch('MAX')">
+            <b>💎 MAX ENGINE</b>
+            <small>High-End PC / 5G / Full HD Media Previews</small>
+        </div>
+        
+        <div class="opt-card" onclick="launch('SMART')">
+            <b>📱 SMART ENGINE</b>
+            <small>Android / 4G / Balanced Performance</small>
+        </div>
+        
+        <div class="opt-card" onclick="launch('LITE')">
+            <b>⚡ LITE ENGINE</b>
+            <small>JioPhone / 2G-3G / Text-Only / Low RAM</small>
+        </div>
+    </div>
+</div>
+
+<div class="header">
+    <div class="logo" onclick="location.reload()">UM GLOBAL</div>
+    <div class="stats">
+        <span>Global Wipes</span>
+        <b id="wipe-display">0</b>
+    </div>
+    <div id="pin-trigger" style="cursor:pointer; font-size: 24px; position: relative;">
+        📌<span id="pin-badge" style="position:absolute; top:-5px; right:-5px; background:red; color:white; font-size:10px; border-radius:50%; width:18px; height:18px; display:flex; items-center; justify-content:center; display:none;">0</span>
+    </div>
+</div>
+
+<div id="special-box">
+    <div class="sb-header">
+        <h3 style="margin:0">Special Box</h3>
+        <button onclick="toggleSidebar()" style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    <div class="sb-list" id="pin-list"></div>
+</div>
+
+<div id="chat"></div>
+
+<div id="reply-bar" style="display:none; background:#eee; padding:10px; border-top:1px solid #ddd; font-size:12px; display:flex; justify-content:space-between;">
+    <div id="reply-text"></div>
+    <div onclick="cancelReply()" style="cursor:pointer; font-weight:bold;">✕</div>
+</div>
+
+<div id="context-menu">
+    <div class="cm-item" id="cm-reply">💬 Reply Message</div>
+    <div class="cm-item" id="cm-pin">📌 Pin to Special Box</div>
+    <div class="cm-item" id="cm-copy">📝 Copy Text</div>
+    <div class="cm-item" id="cm-save" style="color:var(--primary); font-weight:bold;">📥 Save to Device</div>
+</div>
+
+<div class="input-area">
+    <input id="user-name" type="text" placeholder="User" style="width:60px; border:none; border-radius:15px; padding:8px; text-align:center; font-size:12px; background:#fff;">
+    <label style="cursor:pointer; font-size: 24px;">📁<input type="file" id="file-input" style="display:none"></label>
+    <div class="input-wrapper">
+        <input id="m-in" type="text" placeholder="Type message...">
+    </div>
+    <button id="send-btn" style="background:var(--primary); border:none; color:white; width:45px; height:45px; border-radius:50%; font-size:20px; cursor:pointer;">➔</button>
+</div>
+
+<script type="module">
+    import { firebaseConfig } from './config.js';
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const st = getStorage(app);
+
+    let engineMode = 'MAX';
+    let selectedMsg = null;
+    let replyPayload = null;
+
+    // --- ENGINE LAUNCHER ---
+    window.launch = (mode) => {
+        engineMode = mode;
+        localStorage.setItem('um_mode', mode);
+        document.getElementById('gate').style.transform = 'translateY(-100%)';
+        setTimeout(() => document.getElementById('gate').style.display = 'none', 600);
+        runEngine();
+    };
+
+    if(localStorage.getItem('um_mode')) launch(localStorage.getItem('um_mode'));
+
+    // --- CHAT ENGINE ---
+    function runEngine() {
+        // Device-Specific Throttling
+        const limits = { 'LITE': 20, 'SMART': 50, 'MAX': 150 };
+        const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(limits[engineMode]));
+
+        onSnapshot(q, (snap) => {
+            const chat = document.getElementById('chat');
+            chat.innerHTML = "";
+            const msgs = [];
+            snap.forEach(d => msgs.push({id: d.id, ...d.data()}));
+            
+            msgs.reverse().forEach(data => {
+                const bubble = document.createElement('div');
+                const isMe = data.user === (document.getElementById('user-name').value || "Guest");
+                bubble.className = `msg ${isMe ? 'my' : 'other'}`;
+                
+                let content = `<span class="user-tag">${data.user}</span>`;
+                
+                if(data.reply) content += `<div class="reply-quote">${data.reply}</div>`;
+
+                if(data.file) {
+                    if(data.isImg && engineMode !== 'LITE') {
+                        content += `<img src="${data.file}" class="img-preview" onclick="downloadAsset('${data.file}', '${data.fileName}')">`;
+                    } else {
+                        content += `
+                            <div class="file-box" onclick="downloadAsset('${data.file}', '${data.fileName}')">
+                                <span style="font-size:24px;">📄</span>
+                                <div style="overflow:hidden">
+                                    <div style="font-weight:bold; font-size:12px; white-space:nowrap; text-overflow:ellipsis;">${data.fileName}</div>
+                                    <small style="opacity:0.6;">Click to save to device</small>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    content += `<div>${data.txt}</div>`;
+                }
+
+                bubble.innerHTML = content;
+
+                // Long Press / Right Click for Context Menu
+                const openMenu = (e) => {
+                    e.preventDefault();
+                    selectedMsg = data;
+                    const menu = document.getElementById('context-menu');
+                    menu.style.display = 'block';
+                    menu.style.left = Math.min(e.pageX, window.innerWidth - 200) + 'px';
+                    menu.style.top = Math.min(e.pageY, window.innerHeight - 250) + 'px';
+                };
+                bubble.oncontextmenu = openMenu;
+                bubble.ondblclick = openMenu;
+
+                chat.appendChild(bubble);
+            });
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        // Sync Global Stats
+        onSnapshot(collection(db, "stats"), s => {
+            if(!s.empty) document.getElementById('wipe-display').innerText = s.docs[0].data().count || 0;
+        });
+
+        // Sync Special Box
+        onSnapshot(collection(db, "pinned"), s => {
+            const list = document.getElementById('pin-list');
+            const badge = document.getElementById('pin-badge');
+            list.innerHTML = "";
+            badge.innerText = s.size;
+            badge.style.display = s.size > 0 ? 'flex' : 'none';
+            
+            s.docs.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'pin-item';
+                item.innerHTML = `<b>${p.data().by}:</b><br>${p.data().text}`;
+                list.appendChild(item);
+            });
+        });
+    }
+
+    // --- ASSET DOWNLOAD BRIDGE ---
+    window.downloadAsset = async (url, name) => {
+        const prog = document.getElementById('loader');
+        prog.style.width = "40%";
+        try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = name || "UM_Download";
+            link.click();
+            prog.style.width = "100%";
+            setTimeout(() => prog.style.width = "0%", 1000);
+        } catch (e) { window.open(url, '_blank'); }
+    };
+
+    // --- CORE ACTIONS ---
+    async function sendMessage() {
+        const input = document.getElementById('m-in');
+        if(!input.value.trim()) return;
+        
+        await addDoc(collection(db, "messages"), {
+            user: document.getElementById('user-name').value || "Guest",
+            txt: input.value,
+            reply: replyPayload,
+            createdAt: serverTimestamp()
+        });
+        
+        input.value = "";
+        cancelReply();
+    }
+
+    document.getElementById('send-btn').onclick = sendMessage;
+    document.getElementById('m-in').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+
+    // File Upload Logic
+    document.getElementById('file-input').onchange = (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+
+        const prog = document.getElementById('loader');
+        const sRef = ref(st, 'uploads/' + Date.now() + "_" + file.name);
+        const task = uploadBytesResumable(sRef, file);
+
+        task.on('state_changed', (s) => {
+            prog.style.width = (s.bytesTransferred / s.totalBytes) * 100 + "%";
+        }, (err) => alert(err), async () => {
+            const url = await getDownloadURL(task.snapshot.ref);
             await addDoc(collection(db, "messages"), {
-                user: document.getElementById('u-in').value || "Guest",
-                txt: input.value,
-                reply: replyData,
+                user: document.getElementById('user-name').value || "Guest",
+                file: url,
+                fileName: file.name,
+                isImg: file.type.startsWith('image/'),
                 createdAt: serverTimestamp()
             });
-            input.value = "";
-            replyData = null;
-            document.getElementById('r-pre').style.display = 'none';
-        };
-
-        document.getElementById('act-rply').onclick = () => {
-            replyData = activeSel.txt || "Attached Media";
-            document.getElementById('r-pre').innerText = "Replying to: " + replyData;
-            document.getElementById('r-pre').style.display = 'block';
-        };
-
-        document.getElementById('act-pin').onclick = () => {
-            addDoc(collection(db, "pinned"), { text: activeSel.txt || activeSel.fileName, by: activeSel.user });
-        };
-
-        document.getElementById('act-save').onclick = () => {
-            if(activeSel.file) downloadFile(activeSel.file, activeSel.fileName);
-            else alert("Text copied to clipboard");
-        };
-
-        // UI Listeners
-        document.getElementById('p-btn').onclick = () => document.getElementById('side').classList.toggle('open');
-        window.onclick = () => document.getElementById('menu').style.display = 'none';
-        
-        onSnapshot(collection(db, "pinned"), s => {
-            document.getElementById('p-count').innerText = s.size;
-            document.getElementById('p-list').innerHTML = s.docs.map(p => `
-                <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:8px; font-size:12px; border-left:3px solid gold;">
-                    <b>${p.data().by}:</b> ${p.data().text}
-                </div>
-            `).join('');
+            prog.style.width = "0%";
         });
-    </script>
+    };
+
+    // --- UI HELPERS ---
+    window.toggleSidebar = () => document.getElementById('special-box').classList.toggle('open');
+    document.getElementById('pin-trigger').onclick = toggleSidebar;
+
+    window.cancelReply = () => {
+        replyPayload = null;
+        document.getElementById('reply-bar').style.display = 'none';
+    };
+
+    // Context Menu Handlers
+    document.getElementById('cm-reply').onclick = () => {
+        replyPayload = selectedMsg.txt || "Attached Media";
+        document.getElementById('reply-text').innerText = "Replying to: " + replyPayload;
+        document.getElementById('reply-bar').style.display = 'flex';
+    };
+
+    document.getElementById('cm-pin').onclick = () => {
+        addDoc(collection(db, "pinned"), {
+            text: selectedMsg.txt || selectedMsg.fileName,
+            by: selectedMsg.user
+        });
+    };
+
+    document.getElementById('cm-copy').onclick = () => {
+        navigator.clipboard.writeText(selectedMsg.txt || selectedMsg.file);
+        alert("Copied to clipboard!");
+    };
+
+    document.getElementById('cm-save').onclick = () => {
+        if(selectedMsg.file) downloadAsset(selectedMsg.file, selectedMsg.fileName);
+        else alert("This is a text message.");
+    };
+
+    window.onclick = () => document.getElementById('context-menu').style.display = 'none';
+
+</script>
 </body>
 </html>

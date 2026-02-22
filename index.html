@@ -3,68 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Global Chat</title>
+    <title>Pro Chat System</title>
     <style>
-        /* Responsive CSS */
         body { font-family: -apple-system, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #f0f2f5; }
-        #pinned-box { background: #fff9c4; border-bottom: 1px solid #fbc02d; padding: 10px; cursor: pointer; }
-        #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
-        .bubble { padding: 10px 15px; border-radius: 18px; max-width: 80%; font-size: 16px; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .my-msg { align-self: flex-end; background: #0084ff; color: white; }
-        .input-area { display: flex; padding: 10px; background: white; gap: 10px; border-top: 1px solid #ddd; }
-        input { flex: 1; padding: 12px; border-radius: 20px; border: 1px solid #ccc; font-size: 16px; outline: none; }
-        @media (min-width: 768px) { body { padding: 0 25%; } } /* Desktop centering */
+        
+        /* Feature: Responsive Pinned Box */
+        #pinned-box { background: #fff9c4; border-bottom: 1px solid #fbc02d; padding: 10px; z-index: 1000; cursor: pointer; }
+        #p-list { display: none; font-size: 14px; margin-top: 8px; max-height: 120px; overflow-y: auto; border-top: 1px dashed #fbc02d; padding-top: 5px; }
+        
+        /* Feature: Main Chat Area */
+        #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+        .bubble { padding: 10px 15px; border-radius: 18px; max-width: 85%; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; font-size: 16px; }
+        .my-msg { align-self: flex-end; background: #0084ff; color: white; border-bottom-right-radius: 2px; }
+        .user-label { font-size: 11px; font-weight: bold; margin-bottom: 4px; display: block; opacity: 0.7; }
+        
+        /* Feature: Multi-Emoji Reaction Bar */
+        .reaction-bar { display: flex; gap: 4px; margin-top: 8px; overflow-x: auto; scrollbar-width: none; }
+        .reaction-bar::-webkit-scrollbar { display: none; }
+        .reaction-btn { background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 2px 6px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 3px; }
+        .my-msg .reaction-btn { background: rgba(255,255,255,0.2); color: white; border-color: rgba(255,255,255,0.2); }
+
+        /* Input Area */
+        .input-area { display: flex; padding: 10px; background: white; border-top: 1px solid #ddd; gap: 8px; }
+        input { border: 1px solid #ccc; border-radius: 20px; padding: 12px; outline: none; font-size: 16px; }
+        #user { width: 70px; flex: none; font-weight: bold; border-color: #0084ff; }
+        #msg { flex: 1; }
+        
+        @media (min-width: 768px) { body { padding: 0 25%; } }
     </style>
 </head>
 <body>
-    <div id="pinned-box" onclick="document.getElementById('p-list').style.display = document.getElementById('p-list').style.display === 'none' ? 'block' : 'none'">
-        <b>📌 Pinned (<span id="p-count">0</span>)</b>
-        <div id="p-list" style="display:none; font-size: 14px; margin-top: 5px;"></div>
-    </div>
 
-    <div style="text-align:center; font-size:11px; color:gray; padding:5px;">Wipe Counter: <span id="wipe-ui" style="color:red">0</span></div>
+    <div id="pinned-box" onclick="togglePins()">
+        <div style="display:flex; justify-content:space-between">
+            <b>📌 Important Updates (<span id="p-count">0</span>)</b>
+            <span id="p-arrow">▼</span>
+        </div>
+        <div id="p-list"></div>
+    </div>
 
     <div id="messages"></div>
 
+    <div style="text-align:center; padding:5px; font-size:10px; color:#999;">
+        Cloud Status: Active | Global Wipes: <span id="wipe-ui" style="color:red; font-weight:bold">0</span>
+    </div>
+
     <div class="input-area">
-        <input id="user" type="text" placeholder="Name" style="width:60px; flex:none;">
-        <input id="msg" type="text" placeholder="Type..." onkeydown="if(event.key==='Enter') send()">
-        <button onclick="send()" style="border:none; background:none; font-size:24px; cursor:pointer;">➔</button>
+        <input id="user" type="text" placeholder="Name">
+        <input id="msg" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter') send()">
+        <button onclick="send()" style="border:none; background:#0084ff; color:white; border-radius:50%; width:40px; height:40px; cursor:pointer;">➔</button>
     </div>
 
     <script type="module">
         import { firebaseConfig } from './config.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const emojiList = ['👍','👎','❤️','🧡','💛','💚','💙','💜','🖤','😂','🔥'];
 
-        // Feature: Preserve Real-time Chat
+        // Toggle Pinned View
+        window.togglePins = () => {
+            const list = document.getElementById('p-list');
+            const arrow = document.getElementById('p-arrow');
+            const isOpen = list.style.display === 'block';
+            list.style.display = isOpen ? 'none' : 'block';
+            arrow.innerText = isOpen ? '▼' : '▲';
+        };
+
+        // Real-time Messages & Reactions
         onSnapshot(query(collection(db, "messages"), orderBy("createdAt")), (snap) => {
             const container = document.getElementById('messages');
+            const myName = document.getElementById('user').value;
             container.innerHTML = "";
             snap.forEach(d => {
-                const isMe = d.data().user === document.getElementById('user').value;
-                container.innerHTML += `<div class="bubble ${isMe ? 'my-msg' : ''}">${d.data().text}</div>`;
+                const data = d.data();
+                const isMe = data.user === myName;
+                
+                let reactionHtml = `<div class="reaction-bar">`;
+                emojiList.forEach(emo => {
+                    const count = data.reactions?.[emo] || 0;
+                    if(count > 0 || ['👍','❤️'].includes(emo)) {
+                        reactionHtml += `<button class="reaction-btn" onclick="react('${d.id}','${emo}')">${emo} <span>${count}</span></button>`;
+                    }
+                });
+                reactionHtml += `</div>`;
+
+                container.innerHTML += `
+                    <div class="bubble ${isMe ? 'my-msg' : ''}">
+                        <span class="user-label">${data.user}</span>
+                        ${data.text}
+                        ${reactionHtml}
+                    </div>`;
             });
             container.scrollTop = container.scrollHeight;
         });
 
-        // Feature: Preserve Pinned Messages
-        onSnapshot(collection(db, "pinned"), (snap) => {
-            document.getElementById('p-count').innerText = snap.size;
-            document.getElementById('p-list').innerHTML = snap.docs.map(d => `<div>• ${d.data().text}</div>`).join('');
+        // Pinned & Wipe Stats
+        onSnapshot(collection(db, "pinned"), (s) => {
+            document.getElementById('p-count').innerText = s.size;
+            document.getElementById('p-list').innerHTML = s.docs.map(d => `<div style="padding:5px; border-bottom:1px solid #eee"><b>${d.data().user}:</b> ${d.data().text}</div>`).join('');
         });
-
-        // Feature: Preserve Wipe Counter
         onSnapshot(doc(db, "admin", "stats"), (d) => { if(d.exists()) document.getElementById('wipe-ui').innerText = d.data().wipes; });
 
         window.send = () => {
-            const text = document.getElementById('msg').value;
-            if(!text) return;
-            addDoc(collection(db, "messages"), { user: document.getElementById('user').value || "Guest", text, createdAt: serverTimestamp() });
+            const val = document.getElementById('msg').value;
+            if(!val) return;
+            addDoc(collection(db, "messages"), { user: document.getElementById('user').value || "Guest", text: val, createdAt: serverTimestamp() });
             document.getElementById('msg').value = "";
+        };
+
+        window.react = (id, emo) => {
+            updateDoc(doc(db, "messages", id), { [`reactions.${emo}`]: increment(1) });
         };
     </script>
 </body>

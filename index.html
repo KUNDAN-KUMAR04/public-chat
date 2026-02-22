@@ -3,128 +3,244 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Ultra Max Global</title>
     <style>
-        :root { --primary: #0084ff; --bg: #f0f2f5; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: -apple-system, sans-serif; }
+        :root { --primary: #0084ff; --bg: #f0f2f5; --bubble-my: #0084ff; --bubble-other: #ffffff; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: -apple-system, system-ui, sans-serif; }
         body { margin: 0; background: var(--bg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        #gate { position: fixed; inset: 0; background: var(--primary); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: 0.5s; padding: 20px; }
-        .opt { background: rgba(255,255,255,0.15); width: 100%; max-width: 320px; padding: 18px; border-radius: 15px; margin: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); text-align: center; }
-        .nav { height: 60px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; z-index: 100; }
-        #chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; }
-        .bubble { background: #fff; padding: 10px 14px; border-radius: 18px; max-width: 85%; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 8px; position: relative; }
-        .my { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 4px; }
-        #side { position: fixed; top: 0; right: -280px; width: 270px; height: 100%; background: #fff; transition: 0.3s; z-index: 1000; padding: 20px; box-shadow: -3px 0 10px rgba(0,0,0,0.1); overflow-y: auto; }
+
+        /* --- DEVICE SPECIFIC UI --- */
+        #gate { position: fixed; inset: 0; background: var(--primary); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+        .opt { background: rgba(255,255,255,0.1); width: 280px; padding: 20px; border-radius: 15px; margin: 10px; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); text-align: center; backdrop-filter: blur(10px); }
+        
+        .nav { height: 60px; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #ddd; z-index: 100; }
+        #chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+
+        /* --- THE BUBBLE ENGINE --- */
+        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 85%; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .my { align-self: flex-end; background: var(--bubble-my); color: white; border-bottom-right-radius: 4px; }
+        .other { align-self: flex-start; background: var(--bubble-other); color: #000; border-bottom-left-radius: 4px; }
+        
+        /* Reply UI */
+        .reply-box { font-size: 11px; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 5px; margin-bottom: 5px; border-left: 3px solid var(--primary); }
+        
+        /* Lite Mode Overrides (JioPhone/Low RAM) */
+        .space-lite .bubble { border-radius: 4px; border: 1px solid #ccc; max-width: 95%; font-size: 13px; box-shadow: none; }
+        .space-lite .img-msg { max-height: 150px; object-fit: cover; }
+        
+        /* --- ELEMENTS --- */
+        .bar { background: #fff; padding: 10px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #ddd; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+        #m-in { flex: 1; border-radius: 20px; border: 1px solid #ddd; padding: 10px 15px; outline: none; font-size: 16px; }
+        
+        #side { position: fixed; top: 0; right: -300px; width: 280px; height: 100%; background: #fff; transition: 0.3s; z-index: 1000; padding: 20px; box-shadow: -5px 0 15px rgba(0,0,0,0.1); }
         #side.open { right: 0; }
-        .bar { background: #fff; padding: 10px; border-top: 1px solid #ddd; display: flex; align-items: center; gap: 8px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-        #m-in { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 10px 15px; outline: none; font-size: 16px; }
-        #menu { display: none; position: fixed; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.2); border-radius: 12px; z-index: 2000; width: 150px; }
-        .m-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 14px; }
-        .img-msg { width: 100%; border-radius: 12px; margin-top: 5px; cursor: pointer; }
-        .big-emoji { font-size: 45px; display: block; padding: 5px 0; }
-        .prog { position: fixed; bottom: 65px; left: 0; height: 3px; background: #4caf50; width: 0%; transition: 0.3s; }
+        
+        #menu { display: none; position: fixed; background: #fff; box-shadow: 0 5px 20px rgba(0,0,0,0.2); border-radius: 12px; z-index: 5000; width: 160px; overflow: hidden; }
+        .m-item { padding: 12px 15px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .m-item:active { background: #f0f0f0; }
+
+        .prog-bar { position: fixed; top: 0; left: 0; height: 3px; background: #4caf50; width: 0%; transition: 0.2s; z-index: 10001; }
     </style>
 </head>
-<body id="b">
+<body id="main">
+
+    <div id="prog" class="prog-bar"></div>
+
     <div id="gate">
-        <h1>ULTRA MAX</h1>
-        <div class="opt" onclick="enter('MAX')"><b>💎 MAX SPACE</b><br><small>Premium 5G</small></div>
-        <div class="opt" onclick="enter('SMART')"><b>📱 SMART SPACE</b><br><small>Budget Android</small></div>
-        <div class="opt" onclick="enter('LITE')"><b>⚡ LITE SPACE</b><br><small>JioPhone / Lite</small></div>
+        <h2 style="margin-bottom:5px;">ULTRA MAX GLOBAL</h2>
+        <p style="opacity:0.7; font-size:12px; margin-bottom:20px;">Optimizing Engine for your Hardware...</p>
+        <div class="opt" onclick="boot('MAX')"><b>💎 MAX SPACE</b><br><small>5G / 8GB+ RAM / HD</small></div>
+        <div class="opt" onclick="enterSmart('SMART')"><b>📱 SMART SPACE</b><br><small>4G / 4GB RAM / Balanced</small></div>
+        <div class="opt" onclick="boot('LITE')"><b>⚡ LITE SPACE</b><br><small>JioPhone / 512MB RAM / Lite</small></div>
     </div>
+
     <div class="nav">
-        <div><b>UM <span id="sp-name"></span></b> <span onclick="localStorage.removeItem('um_space');location.reload()" style="font-size:8px;opacity:0.4;cursor:pointer">RESET</span></div>
-        <div style="font-size:10px;">WIPES: <span id="wipe-c">0</span></div>
-        <div id="p-btn" style="cursor:pointer; font-size:22px;">📌 <span id="p-count" style="font-size:12px;">0</span></div>
+        <div onclick="location.reload()" style="cursor:pointer"><b>UM <span id="mode-tag"></span></b></div>
+        <div id="p-btn" style="cursor:pointer; font-size:20px;">📌 <span id="p-count" style="font-size:12px;">0</span></div>
     </div>
+
     <div id="side">
-        <div style="display:flex; justify-content:space-between;"><h3>Special Box</h3><button onclick="document.getElementById('side').classList.remove('open')">X</button></div>
-        <hr><div id="p-list"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Special Box</h3>
+            <button onclick="document.getElementById('side').classList.remove('open')">✕</button>
+        </div>
+        <hr>
+        <div id="p-list"></div>
     </div>
+
     <div id="chat"></div>
-    <div id="prog" class="prog"></div>
-    <div id="menu"><div class="m-item" id="m-fwd">🚀 Forward</div><div class="m-item" id="m-pin">📌 Pin to Box</div><div class="m-item" id="m-shr">📤 Share</div></div>
+
+    <div id="menu">
+        <div class="m-item" id="act-rply">💬 Reply</div>
+        <div class="m-item" id="act-pin">📌 Pin to Box</div>
+        <div class="m-item" id="act-save">📥 Save to Device</div>
+    </div>
+
     <div class="bar">
-        <input id="u-in" type="text" placeholder="User" style="width:45px; border:none; border-bottom:1px solid #ddd;">
-        <label style="cursor:pointer; font-size:22px;">📷<input type="file" id="f-in" style="display:none"></label>
+        <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; border-bottom:1px solid #ddd; font-size:12px;">
+        <label style="cursor:pointer; font-size:22px;">📁<input type="file" id="f-in" style="display:none"></label>
+        <div id="r-pre" style="display:none; position:absolute; bottom:70px; left:10px; right:10px; background:#eef; padding:8px; border-radius:10px; font-size:11px; border-left:4px solid var(--primary);"></div>
         <input id="m-in" type="text" placeholder="Message...">
-        <button id="s-btn" style="background:var(--primary); color:white; border:none; border-radius:50%; width:38px; height:38px;">➔</button>
+        <button id="s-btn" style="background:var(--primary); color:white; border:none; border-radius:50%; width:40px; height:40px; font-weight:bold;">➔</button>
     </div>
 
     <script type="module">
         import { firebaseConfig } from './config.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const st = getStorage(app);
-        let space = 'MAX', sel = null;
 
-        window.enter = (s) => {
-            space = s; document.body.className = 'space-' + s.toLowerCase();
-            document.getElementById('sp-name').innerText = s;
+        let config = { space: 'MAX', msgLimit: 100, autoLoadImgs: true };
+        let activeSel = null;
+        let replyData = null;
+
+        // --- THE ENGINE BOOT ---
+        window.boot = (mode) => {
+            config.space = mode;
+            if(mode === 'LITE') { config.msgLimit = 25; config.autoLoadImgs = false; }
+            if(mode === 'SMART') { config.msgLimit = 50; }
+            
+            document.body.className = 'space-' + mode.toLowerCase();
+            document.getElementById('mode-tag').innerText = mode;
             document.getElementById('gate').style.opacity = '0';
-            setTimeout(() => document.getElementById('gate').style.display='none', 500);
-            localStorage.setItem('um_space', s);
+            setTimeout(() => document.getElementById('gate').style.display = 'none', 600);
+            
+            startSync();
         };
-        document.getElementById('p-btn').onclick = () => document.getElementById('side').classList.toggle('open');
-        if(localStorage.getItem('um_space')) enter(localStorage.getItem('um_space'));
 
-        async function send() {
-            const m = document.getElementById('m-in'); if(!m.value.trim()) return;
-            await addDoc(collection(db, "messages"), { user: document.getElementById('u-in').value || "Guest", txt: m.value, createdAt: serverTimestamp() });
-            m.value = "";
+        // --- DIRECT-TO-DEVICE STORAGE BRIDGE ---
+        window.downloadFile = async (url, name) => {
+            const prog = document.getElementById('prog');
+            prog.style.width = "30%";
+            try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name || "UM_File";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                prog.style.width = "100%";
+                setTimeout(() => prog.style.width = "0%", 1000);
+            } catch (e) { window.open(url, '_blank'); }
+        };
+
+        // --- MESSAGE SYNC (Hardware Aware) ---
+        function startSync() {
+            const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(config.msgLimit));
+            onSnapshot(q, (snap) => {
+                const chat = document.getElementById('chat');
+                const msgs = [];
+                snap.forEach(doc => msgs.push({id: doc.id, ...doc.data()}));
+                msgs.reverse();
+
+                chat.innerHTML = "";
+                msgs.forEach(data => {
+                    const bubble = document.createElement('div');
+                    bubble.className = `bubble ${data.user === document.getElementById('u-in').value ? 'my' : 'other'}`;
+                    
+                    let inner = `<small style="opacity:0.6;font-size:10px;">${data.user}</small><br>`;
+                    
+                    if(data.reply) inner += `<div class="reply-box"><b>Replying to:</b><br>${data.reply}</div>`;
+
+                    if(data.file) {
+                        // Logic: Lite users get links to save RAM, others get previews
+                        if(data.isImg && config.autoLoadImgs) {
+                            inner += `<img src="${data.file}" class="img-msg" style="width:100%; border-radius:10px;" onclick="downloadFile('${data.file}', '${data.fileName}')">`;
+                        } else {
+                            inner += `<div style="padding:10px; border:1px dashed #ccc; cursor:pointer;" onclick="downloadFile('${data.file}', '${data.fileName}')">📂 ${data.fileName} <br><small>Click to Download to Device</small></div>`;
+                        }
+                    } else {
+                        inner += `<span>${data.txt}</span>`;
+                    }
+
+                    bubble.innerHTML = inner;
+
+                    // CONTEXT MENU (Long Press / Double Tap)
+                    const triggerMenu = (e) => {
+                        e.preventDefault();
+                        activeSel = data;
+                        const m = document.getElementById('menu');
+                        m.style.display = 'block';
+                        m.style.left = Math.min(e.pageX, window.innerWidth - 160) + 'px';
+                        m.style.top = Math.min(e.pageY, window.innerHeight - 200) + 'px';
+                    };
+                    bubble.oncontextmenu = triggerMenu;
+                    bubble.ondblclick = triggerMenu;
+
+                    chat.appendChild(bubble);
+                });
+                chat.scrollTop = chat.scrollHeight;
+            });
         }
-        document.getElementById('s-btn').onclick = send;
 
+        // --- UPLOAD ENGINE (Direct Bridge) ---
         document.getElementById('f-in').onchange = (e) => {
-            const file = e.target.files[0]; if(!file) return;
+            const file = e.target.files[0];
+            if(!file) return;
             const sRef = ref(st, 'u/' + Date.now() + "_" + file.name);
-            const task = uploadBytesResumable(sRef, file);
-            task.on('state_changed', (s) => { document.getElementById('prog').style.width = (s.bytesTransferred/s.totalBytes)*100 + "%"; }, null, async () => {
-                const url = await getDownloadURL(task.snapshot.ref);
-                await addDoc(collection(db, "messages"), { user: document.getElementById('u-in').value||"Guest", file: url, fileName: file.name, isImg: file.type.startsWith('image/'), createdAt: serverTimestamp() });
+            const upload = uploadBytesResumable(sRef, file);
+            
+            upload.on('state_changed', (s) => {
+                document.getElementById('prog').style.width = (s.bytesTransferred / s.totalBytes) * 100 + "%";
+            }, null, async () => {
+                const url = await getDownloadURL(upload.snapshot.ref);
+                await addDoc(collection(db, "messages"), {
+                    user: document.getElementById('u-in').value || "Guest",
+                    file: url, fileName: file.name, isImg: file.type.startsWith('image/'),
+                    createdAt: serverTimestamp()
+                });
                 document.getElementById('prog').style.width = "0%";
             });
         };
 
-        window.save = async (url, name) => {
-            try { const res = await fetch(url); const b = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
-            catch(e) { window.open(url, '_blank'); }
+        // --- INTERACTION ACTIONS ---
+        document.getElementById('s-btn').onclick = async () => {
+            const input = document.getElementById('m-in');
+            if(!input.value.trim()) return;
+            await addDoc(collection(db, "messages"), {
+                user: document.getElementById('u-in').value || "Guest",
+                txt: input.value,
+                reply: replyData,
+                createdAt: serverTimestamp()
+            });
+            input.value = "";
+            replyData = null;
+            document.getElementById('r-pre').style.display = 'none';
         };
 
-        onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snap) => {
-            const chat = document.getElementById('chat'); chat.innerHTML = "";
-            snap.forEach(d => {
-                const data = d.data(), div = document.createElement('div');
-                div.className = `bubble ${data.user === document.getElementById('u-in').value ? 'my' : ''}`;
-                if(data.file) {
-                    if(data.isImg && space !== 'LITE') div.innerHTML = `<img src="${data.file}" class="img-msg" onclick="save('${data.file}','img.jpg')">`;
-                    else div.innerHTML = `<div style="font-size:11px;">📄 ${data.fileName}<br><button onclick="save('${data.file}','${data.fileName}')">SAVE</button></div>`;
-                } else {
-                    const isEmoji = /^(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]){1,3}$/.test(data.txt);
-                    div.innerHTML = `<small>${data.user}</small><div class="${isEmoji?'big-emoji':''}">${data.txt}</div>`;
-                }
-                div.oncontextmenu = (e) => { e.preventDefault(); sel = data; const m = document.getElementById('menu'); m.style.display='block'; m.style.left=e.pageX+'px'; m.style.top=e.pageY+'px'; };
-                div.ondblclick = div.oncontextmenu;
-                chat.appendChild(div);
-            });
-            chat.scrollTop = chat.scrollHeight;
-        });
+        document.getElementById('act-rply').onclick = () => {
+            replyData = activeSel.txt || "Attached Media";
+            document.getElementById('r-pre').innerText = "Replying to: " + replyData;
+            document.getElementById('r-pre').style.display = 'block';
+        };
 
+        document.getElementById('act-pin').onclick = () => {
+            addDoc(collection(db, "pinned"), { text: activeSel.txt || activeSel.fileName, by: activeSel.user });
+        };
+
+        document.getElementById('act-save').onclick = () => {
+            if(activeSel.file) downloadFile(activeSel.file, activeSel.fileName);
+            else alert("Text copied to clipboard");
+        };
+
+        // UI Listeners
+        document.getElementById('p-btn').onclick = () => document.getElementById('side').classList.toggle('open');
+        window.onclick = () => document.getElementById('menu').style.display = 'none';
+        
         onSnapshot(collection(db, "pinned"), s => {
             document.getElementById('p-count').innerText = s.size;
-            document.getElementById('p-list').innerHTML = s.docs.map(p => `<div style="background:#fff9c4; padding:8px; margin-bottom:5px; border-radius:5px; font-size:12px;">${p.data().text}</div>`).join('');
+            document.getElementById('p-list').innerHTML = s.docs.map(p => `
+                <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:8px; font-size:12px; border-left:3px solid gold;">
+                    <b>${p.data().by}:</b> ${p.data().text}
+                </div>
+            `).join('');
         });
-        
-        onSnapshot(collection(db, "stats"), s => { if(!s.empty) document.getElementById('wipe-c').innerText = s.docs[0].data().count; });
-
-        document.getElementById('m-fwd').onclick = () => document.getElementById('m-in').value = "FWD: " + (sel.txt || sel.fileName);
-        document.getElementById('m-pin').onclick = () => addDoc(collection(db, "pinned"), { text: sel.txt || sel.fileName });
-        window.onclick = () => document.getElementById('menu').style.display='none';
     </script>
 </body>
 </html>

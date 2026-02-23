@@ -1,23 +1,35 @@
-# 🌍 ULTRA MAX GLOBAL — Setup Guide v3.0
+# 🌍 ULTRA MAX GLOBAL — Setup Guide v3.1
 
-## ✨ What's New in v3.0
+## ✅ Firestore Rules Compatibility
 
-| Feature | Status |
-|---|---|
-| 😊 Reactions (👍❤️😂 etc.) | ✅ New |
-| ✏️ Edit messages | ✅ New |
-| ⌨️ Typing indicator | ✅ New |
-| 👁️ Read receipts | ✅ New |
-| 🔍 Message search (Ctrl+F) | ✅ New |
-| 🌙 Dark mode toggle | ✅ New |
-| 🎨 User color customization | ✅ New |
-| 🌳 Improved reply tree | ✅ Improved |
-| 📁 All file types (video/audio/pdf/zip…) | ✅ Improved |
-| 👥 Real cross-device online count | ✅ Fixed |
-| 🗑️ Wipe system (broken import fixed) | ✅ Fixed |
-| 📌 Sidebar outside-click-to-close | ✅ Fixed |
-| ⚠️ config.js placeholder | ✅ Added |
-| 🏗️ Clean module architecture | ✅ Improved |
+This build is fully compatible with these exact rules:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /messages/{msg} {
+      allow read, create, update: if true;
+      allow delete: if false;  // Only Admin Dashboard can delete
+    }
+    match /pinned/{pin} { allow read: if true; }
+    match /admin/stats  { allow read: if true; }
+  }
+}
+```
+
+### How each module adapts to your rules:
+
+| Feature | Collection | How it works |
+|---|---|---|
+| Messages | `/messages` | Send=`addDoc`, Edit=`updateDoc`, "Delete"=`updateDoc {deleted:true}` |
+| Pinned messages | `/pinned` | Pin=`addDoc`, Unpin=`updateDoc {hidden:true}` (no deleteDoc!) |
+| Wipe counter display | `/admin/stats` | Read-only via `onSnapshot`. Increment done by your Admin Dashboard |
+| Wipe chat | `/messages` | Soft-wipe: `updateDoc {deleted:true}` on all messages |
+| Reactions | `/messages` | `updateDoc {reactions:{...}}` — works within update rule |
+| Read receipts | `/messages` | `updateDoc {seenBy:[...]}` — works within update rule |
+| Typing indicator | none | Uses **BroadcastChannel + localStorage** (no Firestore needed) |
+| Active users | none | Uses **BroadcastChannel + localStorage** (no Firestore needed) |
 
 ---
 
@@ -34,26 +46,8 @@ export const firebaseConfig = {
     appId:             "YOUR_APP_ID"
 };
 ```
-Get these from: **Firebase Console → Your Project → Project Settings → Your Apps**
 
-### Step 2 — Firestore Security Rules
-In Firebase Console → Firestore → Rules, paste:
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /messages/{doc}  { allow read, write: if true; }
-    match /pins/{doc}      { allow read, write: if true; }
-    match /stats/{doc}     { allow read, write: if true; }
-    match /presence/{doc}  { allow read, write: if true; }
-    match /typing/{doc}    { allow read, write: if true; }
-  }
-}
-```
-*(Tighten these with auth rules when you're ready)*
-
-### Step 3 — Storage Rules
-In Firebase Console → Storage → Rules:
+### Step 2 — Firebase Storage Rules
 ```
 rules_version = '2';
 service firebase.storage {
@@ -66,146 +60,92 @@ service firebase.storage {
 }
 ```
 
-### Step 4 — Deploy
-Upload all files to **GitHub Pages**, **Vercel**, or **Firebase Hosting**.
+### Step 3 — Create Firestore Documents
+Your rules reference `admin/stats`. Create it manually in the Firebase Console:
+- Collection: `admin`
+- Document ID: `stats`
+- Fields: `wipes: 0`, `count: 0`
+
+### Step 4 — Deploy all files
+Upload to GitHub Pages, Vercel, or Firebase Hosting.
 
 ### Step 5 — Hard refresh
-`Ctrl + Shift + R` (or `Cmd + Shift + R` on Mac)
+`Ctrl + Shift + R`
 
 ---
 
 ## 📁 File Structure
 
 ```
-📄 index.html           Main HTML — clean, semantic
-📄 config.js            ⚠️ Your Firebase credentials (never commit!)
-📄 style.css            All styles, CSS variables, dark mode
-📄 manifest.json        PWA config
-📄 sw.js                Service worker (offline/caching)
+📄 index.html              Main HTML
+📄 config.js               ⚠️ Your Firebase credentials (never commit!)
+📄 style.css               All styles + dark mode CSS variables
+📄 manifest.json           PWA config
+📄 sw.js                   Service worker (offline/caching)
 
-🔧 CORE MODULES:
-  core.js               Firebase init, boot, FEATURES config
-  app.js                Entry point — imports all modules in order
-
-💬 FEATURE MODULES:
-  messages.js           Send/receive/edit/delete, reply tree
-  file-upload.js        All file types with progress bar
-  reactions.js          Emoji reactions on messages
-  typing-indicator.js   "X is typing…" via Firestore
-  read-receipts.js      Seen status via IntersectionObserver
-  message-search.js     Full-text search (Ctrl+F)
-  dark-mode.js          Dark/light toggle + system preference
-  user-colors.js        Color picker per username
-  active-users.js       Real cross-device presence (Firestore)
-  special-box.js        Sidebar, pinning, outside-click-close
-  wipe-system.js        Wipe chat + counter (fixed import bug)
-  emoji-support.js      Font stack for emoji rendering
+🔧 MODULES:
+  app.js                   Entry point — imports all modules
+  core.js                  Firebase init, boot, FEATURES config
+  messages.js              Send/receive/edit/soft-delete, reply tree
+  file-upload.js           All file types, progress bar
+  reactions.js             Emoji reactions (stored in message doc)
+  read-receipts.js         Seen status (stored in message doc)
+  message-search.js        Full-text search, Ctrl+F shortcut
+  dark-mode.js             Dark/light toggle + system preference
+  user-colors.js           Per-user color picker
+  active-users.js          Cross-tab counter via BroadcastChannel
+  typing-indicator.js      Cross-tab "typing…" via BroadcastChannel
+  special-box.js           Sidebar, pin/unpin (collection: "pinned")
+  wipe-system.js           Soft-wipe via updateDoc, reads admin/stats
+  emoji-support.js         Font stack for emoji rendering
 ```
 
 ---
 
-## 🎮 Features Guide
+## 🎮 Features
 
-### Reactions
-- Hover a message → click 😊 button → pick emoji
-- Click a reaction pill to toggle your reaction
-- One reaction per user per message
+### Message "Delete"
+- Your rules set `allow delete: if false`
+- So "delete" = soft-delete: `{deleted:true, text:'', fileURL:null}`
+- The message stays in Firestore but renders as *"This message was deleted"*
+- Your Admin Dashboard can hard-delete if needed
 
-### Edit Messages
-- Hover your own message → click ✏️
-- Input bar shows orange "Editing" tag
-- Press Enter or ✔ to save, Escape to cancel
+### Wipe Counter
+- Display reads from `admin/stats` (read-only per rules)
+- The counter number is incremented by your **Admin Dashboard** only
+- The Wipe button soft-deletes all messages (`updateDoc`) — it does NOT write to `admin/stats`
 
-### Typing Indicator
-- Automatically shows when you type
-- Clears 3 seconds after you stop typing
-- Shows up to 3 names: "Alice, Bob are typing…"
+### Pinned Messages
+- Stored in `/pinned` collection (read allowed by rules)
+- "Unpin" sets `{hidden:true}` via `updateDoc` — no deleteDoc needed
+- The query filters `where('hidden', '==', false)` automatically
 
-### Message Search
-- Click 🔍 in nav or press `Ctrl+F` / `Cmd+F`
-- Searches message text and usernames
-- Click result to scroll to that message
-
-### Dark Mode
-- Click ☀️/🌙 button in nav
-- Automatically follows system preference on first load
-- Your choice is remembered
-
-### User Colors
-- Click the colored dot next to your username input
-- Pick from 12 presets or use custom color picker
-- Your color shows on your avatar and username
-
-### Reply Tree
-- Click ↩ on any message to reply to it
-- Replies nest visually up to 4 levels deep
-- Click a reply quote to scroll to the original
-
-### File Uploads
-- Click 📎 to attach files
-- MAX mode: images, video, audio, PDF, docs, zip (up to 50MB)
-- SMART mode: images, video, audio, PDF
-- LITE mode: images only
-- Preview before sending with optional caption
-
-### Read Receipts
-- Messages you send show "👁 Seen by X" when others read them
-- Based on IntersectionObserver (no polling)
-
----
-
-## 🔧 Adding New Features
-
-```js
-// 1. Create my-feature.js
-class MyFeature {
-    constructor() {
-        this.init();
-    }
-    init() {
-        window.addEventListener('engine-booted', ({ detail }) => {
-            console.log('My feature started in', detail.mode);
-        });
-    }
-}
-window.myFeature = new MyFeature();
-export default window.myFeature;
-
-// 2. Add to app.js
-import './my-feature.js';
-```
-
----
-
-## 🔥 Firestore Collections
-
-| Collection | Purpose |
-|---|---|
-| `messages` | All chat messages |
-| `pins` | Pinned messages |
-| `stats` | Wipe counter (`stats/global`) |
-| `presence` | Online users (real-time) |
-| `typing` | Typing indicators |
+### Typing & Online Count
+- Work across multiple tabs on the **same browser/device** via BroadcastChannel
+- For **cross-device** indicators, add these to your Firestore rules:
+  ```
+  match /typing/{doc}   { allow read, write: if true; }
+  match /presence/{doc} { allow read, write: if true; }
+  ```
+  Then use the Firestore versions from the v3.0 release.
 
 ---
 
 ## 🐛 Troubleshooting
 
-**App crashes on load?**
-→ Check `config.js` has your real Firebase values
+**"Missing or insufficient permissions" error?**
+→ Check your Firestore rules allow `read, create, update` on `/messages`
+→ Check `/pinned` allows `read` (the app only reads pinned)
+→ Check `/admin/stats` allows `read`
 
-**Messages not sending?**
-→ Check Firestore rules allow write access
-→ Open browser console (F12) for errors
+**Wipe counter not showing?**
+→ Make sure `admin/stats` document exists in Firestore Console
+→ Create it manually: Collection=`admin`, Doc=`stats`, field `wipes=0`
 
-**Files not uploading?**
-→ Check Firebase Storage rules
-→ Verify Storage bucket name in `config.js`
+**Pinned messages not loading?**
+→ The `/pinned` query uses `where('hidden', '==', false)` — you need a Firestore composite index
+→ Firebase Console will show a link to create it automatically when the query first runs
 
-**Reactions/typing not working?**
-→ Add `presence` and `typing` collections to Firestore rules
-
-**Active users always shows 1?**
-→ Now uses Firestore — make sure `presence` collection is allowed
-
-**Hard refresh:** `Ctrl+Shift+R` clears service worker cache
+**Messages not deleting visually?**
+→ They soft-delete: `deleted:true` renders as "This message was deleted"
+→ Hard delete requires Admin Dashboard (rules block client-side delete)

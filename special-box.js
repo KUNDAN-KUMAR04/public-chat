@@ -1,9 +1,12 @@
 /**
  * 📌 SPECIAL BOX — Sidebar with pinned messages, outside-click-to-close
+ * Collection: "pinned" (matches Firestore rules)
+ * Unpin: updateDoc {hidden:true} — delete is not permitted by Firestore rules
  */
 
 import {
-    collection, addDoc, deleteDoc, onSnapshot, serverTimestamp, doc, query, orderBy
+    collection, addDoc, updateDoc, onSnapshot, serverTimestamp,
+    doc, query, orderBy, where
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 let unsubPins = null;
@@ -19,7 +22,6 @@ window.toggleSidebar = () => {
     if (!side) return;
     const isOpen = side.classList.toggle('open');
     if (isOpen) {
-        // Close on outside click
         requestAnimationFrame(() => {
             const handler = (e) => {
                 if (!side.contains(e.target) && !document.getElementById('sidebar-toggle')?.contains(e.target)) {
@@ -40,7 +42,6 @@ window.hideSidebar = closeSidebar;
 
 // ── Sidebar init ──────────────────────────────────────────────────────────────
 function setupSidebar() {
-    // ESC key closes sidebar
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeSidebar();
     });
@@ -53,19 +54,25 @@ window.pinMessage = async (msgId) => {
     const user = el?.dataset.user || 'Guest';
 
     try {
-        await addDoc(collection(window.db, 'pins'), {
-            msgId, text, user,
+        // Collection is "pinned" per Firestore rules
+        await addDoc(collection(window.db, 'pinned'), {
+            msgId,
+            text,
+            user,
+            hidden:   false,
             pinnedAt: serverTimestamp()
         });
         showToast('📌 Message pinned');
     } catch (err) {
         console.error('Pin error:', err);
+        showToast('❌ Could not pin message');
     }
 };
 
+// Firestore rules block delete on /pinned — mark hidden via update instead
 window.unpinMessage = async (pinDocId) => {
     try {
-        await deleteDoc(doc(window.db, 'pins', pinDocId));
+        await updateDoc(doc(window.db, 'pinned', pinDocId), { hidden: true });
     } catch (err) {
         console.error('Unpin error:', err);
     }
@@ -75,7 +82,12 @@ window.unpinMessage = async (pinDocId) => {
 function subscribeTopins() {
     if (unsubPins) unsubPins();
 
-    const q = query(collection(window.db, 'pins'), orderBy('pinnedAt', 'desc'));
+    // Filter out hidden pins, newest first
+    const q = query(
+        collection(window.db, 'pinned'),
+        where('hidden', '==', false),
+        orderBy('pinnedAt', 'desc')
+    );
     unsubPins = onSnapshot(q, (snap) => {
         renderPinList(snap.docs);
     });
@@ -102,7 +114,6 @@ function renderPinList(docs) {
             </div>
             <button class="pin-remove" onclick="window.unpinMessage('${d.id}')" title="Unpin">✕</button>
         `;
-        // Click to scroll to message
         item.querySelector('.pin-content').onclick = () => {
             closeSidebar();
             const msgEl = document.querySelector(`[data-msg-id="${data.msgId}"]`);

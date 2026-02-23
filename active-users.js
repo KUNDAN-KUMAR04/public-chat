@@ -1,65 +1,101 @@
 /**
- * 👥 ACTIVE USERS — Real-time online count via Firestore presence
- * (Fixes the fake localStorage-only count — now works across tabs/devices)
+ * 👥 ACTIVE USERS — Cross-tab/window presence counter
+ *
+ * Since /presence is not in Firestore rules, we use:
+ *   1. BroadcastChannel — instant cross-tab comms on same device/browser
+ *   2. localStorage + storage events — fallback for older browsers / same device
+ *
+ * This gives accurate counts across multiple tabs and windows on the same device.
+ * For true cross-device counts, add a /presence collection to your Firestore rules.
  */
 
-import {
-    doc, setDoc, deleteDoc, onSnapshot, collection, serverTimestamp
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+const SESSION_ID = 'um_' + Math.random().toString(36).slice(2, 10);
+const LS_KEY     = 'um_presence';
+const STALE_MS   = 60_000; // 60s before a session is considered gone
+const HB_MS      = 20_000; // heartbeat every 20s
 
-const SESSION_ID = 'session_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now();
-const STALE_MS   = 90_000; // 90 seconds — mark stale
-
-let heartbeatInterval = null;
-let unsubPresence     = null;
+let bc = null; // BroadcastChannel
+let hbInterval = null;
 
 window.addEventListener('engine-booted', () => {
     initPresence();
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-async function initPresence() {
-    const user  = document.getElementById('u-in')?.value || 'Guest';
-    const ref   = doc(window.db, 'presence', SESSION_ID);
+function initPresence() {
+    // BroadcastChannel for same-browser cross-tab messaging
+    if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('um_presence_channel');
+        bc.onmessage = () => updateWidget(readCount());
+    }
 
-    const payload = () => ({
-        user,
-        ts:    Date.now(),
-        mode:  window.engineMode
+    // Register this session
+    writeSession();
+
+    // Heartbeat — keep this session alive
+    hbInterval = setInterval(() => {
+        writeSession();
+        updateWidget(readCount());
+        bc?.postMessage({ type: 'heartbeat', id: SESSION_ID });
+    }, HB_MS);
+
+    // Listen for other tabs updating localStorage
+    window.addEventListener('storage', (e) => {
+        if (e.key === LS_KEY) updateWidget(readCount());
     });
 
-    // Write on load
-    await setDoc(ref, payload()).catch(() => {});
-
-    // Heartbeat every 30s
-    heartbeatInterval = setInterval(async () => {
-        const currentUser = document.getElementById('u-in')?.value || 'Guest';
-        await setDoc(ref, { ...payload(), user: currentUser }).catch(() => {});
-    }, 30_000);
-
-    // Subscribe to all presence docs
-    unsubPresence = onSnapshot(collection(window.db, 'presence'), (snap) => {
-        const now   = Date.now();
-        const alive = snap.docs.filter(d => {
-            const ts = d.data()?.ts;
-            return ts && (now - ts) < STALE_MS;
-        });
-        updateWidget(alive.length);
-    });
+    // Initial widget render
+    updateWidget(readCount());
 
     // Clean up on page leave
-    window.addEventListener('beforeunload', async () => {
-        clearInterval(heartbeatInterval);
-        if (unsubPresence) unsubPresence();
-        await deleteDoc(ref).catch(() => {});
+    window.addEventListener('beforeunload', () => {
+        clearInterval(hbInterval);
+        removeSession();
+        bc?.postMessage({ type: 'leave', id: SESSION_ID });
+        bc?.close();
     });
 
-    // Visibility-based heartbeat pause
+    // Re-register when tab becomes visible again
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            setDoc(ref, payload()).catch(() => {});
+            writeSession();
+            updateWidget(readCount());
         }
     });
+}
+
+// ── localStorage helpers ──────────────────────────────────────────────────────
+function readSessions() {
+    try {
+        return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    } catch { return {}; }
+}
+
+function writeSessions(sessions) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(sessions)); } catch {}
+}
+
+function writeSession() {
+    const sessions = readSessions();
+    // Prune stale sessions
+    const now = Date.now();
+    Object.keys(sessions).forEach(id => {
+        if (now - sessions[id] > STALE_MS) delete sessions[id];
+    });
+    sessions[SESSION_ID] = now;
+    writeSessions(sessions);
+}
+
+function removeSession() {
+    const sessions = readSessions();
+    delete sessions[SESSION_ID];
+    writeSessions(sessions);
+}
+
+function readCount() {
+    const sessions = readSessions();
+    const now = Date.now();
+    return Object.values(sessions).filter(ts => now - ts < STALE_MS).length;
 }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
@@ -72,13 +108,13 @@ function updateWidget(count) {
         document.body.appendChild(widget);
     }
 
-    const tier = count <= 5 ? { label:'BASIC', cls:'tier-basic' }
-               : count <= 20 ? { label:'MEDIUM', cls:'tier-medium' }
-               : count <= 100 ? { label:'MAX', cls:'tier-max' }
-               : { label:'ULTRA', cls:'tier-ultra' };
+    const tier = count <= 5  ? { label: 'BASIC',  cls: 'tier-basic'  }
+               : count <= 20 ? { label: 'MEDIUM', cls: 'tier-medium' }
+               : count <= 100? { label: 'MAX',    cls: 'tier-max'    }
+               :               { label: 'ULTRA',  cls: 'tier-ultra'  };
 
     widget.className = `active-users-widget ${tier.cls}`;
-    widget.title     = `${tier.label} — ${count} online`;
+    widget.title     = `${tier.label} — ${count} tab${count !== 1 ? 's' : ''} open`;
     widget.innerHTML = `
         <span class="presence-dot"></span>
         <span class="presence-count">${count}</span>
@@ -86,4 +122,4 @@ function updateWidget(count) {
     `;
 }
 
-console.log('✅ Active users module loaded (Firestore-based)');
+console.log('✅ Active users module loaded (localStorage/BroadcastChannel)');

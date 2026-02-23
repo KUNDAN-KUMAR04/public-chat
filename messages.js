@@ -3,10 +3,12 @@
  */
 
 import {
-    collection, addDoc, deleteDoc, updateDoc,
+    collection, addDoc, updateDoc,
     query, orderBy, limit, where, onSnapshot,
     serverTimestamp, doc, getDoc
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+// Note: deleteDoc intentionally omitted — Firestore rules block delete on /messages
+// Deletion is soft (updateDoc {deleted:true}) to comply with rules
 import { FEATURES } from './core.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────

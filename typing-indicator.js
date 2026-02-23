@@ -1,104 +1,153 @@
 /**
  * ⌨️ TYPING INDICATOR — "X is typing…"
+ *
+ * Since /typing is not in Firestore rules, we use:
+ *   BroadcastChannel for cross-tab (same device/browser)
+ *   Falls back to localStorage + storage events
+ *
+ * For cross-device typing indicators, add /typing to your Firestore rules.
  */
 
-import {
-    doc, setDoc, deleteDoc, onSnapshot, collection
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { currentUser } from './messages.js';
 
-let typingTimeout = null;
-let isTyping = false;
-let unsubTyping = null;
+const LS_KEY    = 'um_typing';
+const EXPIRE_MS = 4000; // clear after 4s of no keystrokes
 
-// ── Listen for boot ───────────────────────────────────────────────────────────
+let typingTimeout = null;
+let isTyping      = false;
+let bc            = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('engine-booted', () => {
-    startTypingListener();
+    if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('um_typing_channel');
+        bc.onmessage = (e) => {
+            if (e.data?.type === 'typing') {
+                showTyping(e.data.user);
+            } else if (e.data?.type === 'stop') {
+                clearTyping(e.data.user);
+            }
+        };
+    }
+
+    // Listen for storage events from other same-device tabs
+    window.addEventListener('storage', (e) => {
+        if (e.key === LS_KEY) renderTypingFromLS();
+    });
+
+    ensureTypingEl();
 });
 
-// ── Start typing ──────────────────────────────────────────────────────────────
+// ── Start/stop events from messages.js ───────────────────────────────────────
 window.addEventListener('typing-start', () => {
+    const user = currentUser();
+    if (!user || user === 'Guest') return;
+
     if (!isTyping) {
         isTyping = true;
-        setTypingStatus(true);
+        broadcastTyping(user, true);
     }
+
     clearTimeout(typingTimeout);
     typingTimeout = setTimeout(() => {
         isTyping = false;
-        setTypingStatus(false);
-    }, 3000);
+        broadcastTyping(user, false);
+    }, EXPIRE_MS);
 });
 
 window.addEventListener('typing-stop', () => {
+    const user = currentUser();
     clearTimeout(typingTimeout);
     isTyping = false;
-    setTypingStatus(false);
+    broadcastTyping(user, false);
 });
 
-async function setTypingStatus(isTyping) {
-    const user = currentUser();
-    if (!user || user === 'Guest') return;
-    const ref = doc(window.db, 'typing', user);
-    try {
-        if (isTyping) {
-            await setDoc(ref, { user, ts: Date.now() });
-        } else {
-            await deleteDoc(ref);
-        }
-    } catch (e) {
-        // Silently ignore — typing is non-critical
+window.addEventListener('beforeunload', () => {
+    broadcastTyping(currentUser(), false);
+    bc?.close();
+});
+
+// ── Broadcast helpers ─────────────────────────────────────────────────────────
+function broadcastTyping(user, typing) {
+    if (typing) {
+        bc?.postMessage({ type: 'typing', user });
+        writeLS(user, true);
+    } else {
+        bc?.postMessage({ type: 'stop', user });
+        writeLS(user, false);
     }
 }
 
-// ── Listen for others typing ──────────────────────────────────────────────────
-function startTypingListener() {
-    if (unsubTyping) unsubTyping();
+function writeLS(user, typing) {
+    try {
+        const state = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+        if (typing) {
+            state[user] = Date.now();
+        } else {
+            delete state[user];
+        }
+        localStorage.setItem(LS_KEY, JSON.stringify(state));
+    } catch {}
+}
 
-    unsubTyping = onSnapshot(collection(window.db, 'typing'), (snap) => {
-        const myUser = currentUser();
-        const typers = [];
-        const now = Date.now();
-
-        snap.forEach(d => {
-            const data = d.data();
-            if (data.user !== myUser && (now - data.ts) < 5000) {
-                typers.push(data.user);
-            }
-        });
-
+function renderTypingFromLS() {
+    try {
+        const state = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+        const now   = Date.now();
+        const typers = Object.entries(state)
+            .filter(([u, ts]) => u !== currentUser() && (now - ts) < EXPIRE_MS)
+            .map(([u]) => u);
         updateTypingUI(typers);
-    });
+    } catch {}
+}
+
+// ── Show/clear from BroadcastChannel ─────────────────────────────────────────
+const activeTypers = new Map(); // user → timeout id
+
+function showTyping(user) {
+    if (user === currentUser()) return;
+    // Clear existing timeout for this user
+    clearTimeout(activeTypers.get(user));
+    activeTypers.set(user, setTimeout(() => {
+        activeTypers.delete(user);
+        updateTypingUI([...activeTypers.keys()]);
+    }, EXPIRE_MS + 500));
+    updateTypingUI([...activeTypers.keys()]);
+}
+
+function clearTyping(user) {
+    clearTimeout(activeTypers.get(user));
+    activeTypers.delete(user);
+    updateTypingUI([...activeTypers.keys()]);
+}
+
+// ── UI ────────────────────────────────────────────────────────────────────────
+function ensureTypingEl() {
+    if (document.getElementById('typing-indicator')) return;
+    const el = document.createElement('div');
+    el.id        = 'typing-indicator';
+    el.className = 'typing-indicator';
+    el.style.display = 'none';
+    const chat = document.getElementById('chat');
+    if (chat) chat.after(el);
 }
 
 function updateTypingUI(typers) {
-    let el = document.getElementById('typing-indicator');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'typing-indicator';
-        el.className = 'typing-indicator';
-        const chat = document.getElementById('chat');
-        if (chat) chat.after(el);
-    }
+    const el = document.getElementById('typing-indicator');
+    if (!el) return;
 
-    if (typers.length === 0) {
+    if (!typers.length) {
         el.style.display = 'none';
         return;
     }
 
     el.style.display = 'flex';
-    const names = typers.slice(0, 3).join(', ');
+    const names  = typers.slice(0, 3).join(', ');
     const suffix = typers.length === 1 ? 'is typing' : 'are typing';
     el.innerHTML = `
-        <span class="typing-dots">
-            <span></span><span></span><span></span>
-        </span>
+        <span class="typing-dots"><span></span><span></span><span></span></span>
         <span class="typing-text">${names} ${suffix}…</span>
     `;
 }
 
-// Clean up on page unload
-window.addEventListener('beforeunload', () => {
-    setTypingStatus(false);
-});
-
-console.log('✅ Typing indicator module loaded');
+console.log('✅ Typing indicator module loaded (BroadcastChannel/localStorage)');

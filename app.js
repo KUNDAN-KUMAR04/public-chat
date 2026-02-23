@@ -5,6 +5,7 @@
  */
 
 import './core.js';
+import './cache.js';
 import './messages.js';
 import './file-upload.js';
 import './reactions.js';

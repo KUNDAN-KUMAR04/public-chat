@@ -2,142 +2,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ultra Max Global</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-    <!-- Feature Styles -->
     <link rel="stylesheet" href="file-upload.css">
     <link rel="stylesheet" href="active-users.css">
-    <style>
-        /* Gate styles */
-        #gate {
-            position: fixed;
-            inset: 0;
-            background: linear-gradient(135deg, #0084ff 0%, #0066cc 100%);
-            z-index: 10000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transform: translateY(0);
-            transition: transform 0.8s ease;
-        }
-
-        .gate-content {
-            width: 90%;
-            max-width: 400px;
-            text-align: center;
-        }
-
-        #gate h1 {
-            color: white;
-            margin-bottom: 40px;
-            font-size: 32px;
-        }
-
-        .tier {
-            background: rgba(255, 255, 255, 0.15);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            padding: 20px;
-            margin: 12px 0;
-            border-radius: 12px;
-            color: white;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-
-        .tier:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-
-        .tier:active {
-            transform: scale(0.98);
-        }
-
-        .tier small {
-            display: block;
-            font-size: 12px;
-            opacity: 0.9;
-            margin-top: 6px;
-        }
-    </style>
 </head>
 <body>
 
-    <!-- LEVEL SELECTION GATE -->
-    <div id="gate">
-        <div class="gate-content">
-            <h1>🌍 ULTRA MAX GLOBAL</h1>
-            <div class="tier" onclick="boot('MAX')">💎 MAX (5G/PC)</div>
-            <div class="tier" onclick="boot('SMART')">📱 SMART (4G)</div>
-            <div class="tier" onclick="boot('LITE')">⚡ LITE (3G/Jio)</div>
+<!-- LEVEL SELECTION GATE -->
+<div id="gate">
+    <div class="gate-content">
+        <h1>🌍 ULTRA MAX GLOBAL</h1>
+        <div class="tier" onclick="boot('MAX')">💎 MAX (5G/PC)</div>
+        <div class="tier" onclick="boot('SMART')">📱 SMART (4G)</div>
+        <div class="tier" onclick="boot('LITE')">⚡ LITE (3G/Jio)</div>
+    </div>
+</div>
+
+<!-- NAV -->
+<div class="nav" style="background:#fff; height:60px; display:flex; align-items:center; justify-content:space-between; padding:0 15px; border-bottom:1px solid #ddd;">
+    <b style="color:#0084ff">UM GLOBAL</b>
+    <div style="text-align:center;"><small>WIPES</small><br><b id="w-val">0</b></div>
+    <div onclick="toggleSidebar()" style="font-size:25px; cursor:pointer;">📌</div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="side" style="position:fixed; top:0; right:-320px; width:300px; height:100%; background:#fff; z-index:5000; transition:0.3s; padding:20px; box-shadow:-5px 0 15px rgba(0,0,0,0.1);">
+    <h3>📌 Special Box</h3><hr>
+    <div id="pin-list" style="height:60%; overflow-y:auto;"></div>
+    <button onclick="wipeAllData()" style="background:#ff3b30; color:#fff; width:100%; border:none; padding:12px; border-radius:8px; font-weight:600; cursor:pointer; margin-top:12px;">🗑️ WIPE CHAT</button>
+</div>
+
+<!-- CHAT -->
+<div id="chat" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:12px; background:#e5ddd5;"></div>
+
+<!-- MEDIA POPUP -->
+<div id="media-pop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+        <h3 style="color:#fff;">Confirm Send</h3>
+        <img id="pop-img" src="" style="max-width:100%; max-height:60vh; border-radius:12px;">
+        <div style="display:flex; gap:15px;">
+            <button onclick="cancelUpload()" style="background:#444; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer;">Cancel</button>
+            <button id="upload-confirm-btn" onclick="confirmUpload()" style="background:#0084ff; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer;">Send</button>
         </div>
     </div>
+</div>
 
-    <!-- NAV -->
-    <div class="nav" style="background:#fff; height:60px; display:flex; align-items:center; justify-content:space-between; padding:0 15px; border-bottom:1px solid #ddd;">
-        <b style="color:#0084ff">UM GLOBAL</b>
-        <div class="nav-center" style="text-align:center;"><small>WIPES</small><br><b id="w-val">0</b></div>
-        <div onclick="toggleSidebar()" style="font-size:25px; cursor:pointer;">📌</div>
-    </div>
+<!-- REPLY TAG -->
+<div id="r-tag" style="display:none; position:absolute; bottom:70px; left:10px; right:10px; background:#fff; padding:10px; border-radius:10px; border-left:5px solid #0084ff; z-index:100;"></div>
 
-    <!-- SIDEBAR -->
-    <div id="side" style="position:fixed; top:0; right:-320px; width:300px; height:100%; background:#fff; z-index:5000; transition:0.3s; padding:20px; box-shadow:-5px 0 15px rgba(0,0,0,0.1);">
-        <h3>📌 Special Box</h3><hr>
-        <div id="pin-list" style="height:60%; overflow-y:auto;"></div>
-        <button class="wipe-btn" onclick="wipeAllData()" style="background:#ff3b30; color:#fff; width:100%; border:none; padding:12px; border-radius:8px; font-weight:600; cursor:pointer; margin-top:12px;">🗑️ WIPE CHAT</button>
-    </div>
+<!-- INPUT BAR -->
+<div style="display:flex; align-items:flex-end; gap:8px; padding:8px; background:#fff; border-top:1px solid #ddd; flex-shrink:0;">
+    <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; background:none; text-align:center; font-weight:bold;">
+    <label style="font-size:24px; cursor:pointer;">📎<input type="file" id="f-in" style="display:none" accept="image/*,video/*,.pdf"></label>
+    <input id="m-in" type="text" placeholder="Message..." style="flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:20px; font-size:14px;">
+    <button onclick="sendMessage()" style="background:#0084ff; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">📤</button>
+</div>
 
-    <!-- CHAT -->
-    <div id="chat" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:12px; background:#e5ddd5;"></div>
+<!-- YOUR COMPLETE APP (All features in ONE file) -->
+<script type="module" src="app.js"></script>
 
-    <!-- MEDIA POPUP -->
-    <div id="media-pop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; align-items:center; justify-content:center; padding:20px;">
-        <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
-            <h3 style="color:#fff;">Confirm Send</h3>
-            <img id="pop-img" src="" style="max-width:100%; max-height:60vh; border-radius:12px; object-fit:contain;">
-            <div style="display:flex; gap:15px;">
-                <button id="cancel-btn" class="btn" onclick="cancelUpload()" style="background:#444; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer; font-weight:600;">Cancel</button>
-                <button id="upload-confirm-btn" class="btn" onclick="confirmUpload()" style="background:#0084ff; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer; font-weight:600;">Send</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- REPLY TAG -->
-    <div id="r-tag" style="display:none; position:absolute; bottom:70px; left:10px; right:10px; background:#fff; padding:10px; border-radius:10px; border-left:5px solid #0084ff; z-index:100;"></div>
-
-    <!-- INPUT BAR -->
-    <div class="input-bar" style="display:flex; align-items:flex-end; gap:8px; padding:8px; background:#fff; border-top:1px solid #ddd; flex-shrink:0;">
-        <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; background:none; text-align:center; font-weight:bold;">
-        <label style="font-size:24px; cursor:pointer;">📎<input type="file" id="f-in" style="display:none" accept="image/*,video/*,.pdf"></label>
-        <input id="m-in" type="text" placeholder="Message..." style="flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:20px; font-size:14px;">
-        <button class="send-btn" onclick="sendMessage()" style="background:#0084ff; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">📤</button>
-    </div>
-
-    <!-- ===== FEATURE MODULES (Import in order) ===== -->
-    
-    <!-- 1. Core (Gate, Firebase, Boot) -->
-    <script type="module" src="core.js"></script>
-    
-    <!-- 2. Emoji Support (Load fonts first) -->
-    <script type="module" src="emoji-support.js"></script>
-    
-    <!-- 3. Messages (Send/display) -->
-    <script type="module" src="messages.js"></script>
-    
-    <!-- 4. File Upload (With loading indicator) -->
-    <script type="module" src="file-upload.js"></script>
-    
-    <!-- 5. Special Box (Sidebar, pinning) -->
-    <script type="module" src="special-box.js"></script>
-    
-    <!-- 6. Active Users (User counter) -->
-    <script type="module" src="active-users.js"></script>
-    
-    <!-- 7. Wipe System (Clear messages) -->
-    <script type="module" src="wipe-system.js"></script>
+<!-- SUPPORTING FEATURES (Independent modules) -->
+<script type="module" src="emoji-support.js"></script>
+<script type="module" src="file-upload.js"></script>
+<script type="module" src="special-box.js"></script>
+<script type="module" src="active-users.js"></script>
+<script type="module" src="wipe-system.js"></script>
 
 </body>
 </html>

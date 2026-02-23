@@ -63,6 +63,8 @@ window.wipeAllData = async () => {
         // Note: wipe counter increment is handled by your Admin Dashboard.
         // Client rules are read-only on /admin/stats.
 
+        // Also clear IndexedDB cache so old messages don't reappear on reload
+        await window.clearMessageCache?.();
         window.showToast?.('✅ Chat wiped');
     } catch (err) {
         console.error('Wipe error:', err);

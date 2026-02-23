@@ -12,64 +12,60 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const st = getStorage(app);
 
-// GLOBAL STATE
 let engineMode = 'MAX';
 let replyingToId = null;
 let replyingToText = null;
 let fileToUpload = null;
 
-// FEATURE ACCESS LEVELS
 const FEATURES = {
     MAX: { text: true, images: true, videos: true, pdfs: true, replies: true, pin: true, emojis: true, msgLimit: 100 },
     SMART: { text: true, images: true, videos: false, pdfs: false, replies: true, pin: true, emojis: true, msgLimit: 50 },
     LITE: { text: true, images: false, videos: false, pdfs: false, replies: true, pin: true, emojis: true, msgLimit: 20 }
 };
 
-// BOOT SYSTEM
+// BOOT - User selects level from gate
 window.boot = (m) => {
     engineMode = m;
     console.log(`🚀 Boot: ${m} level selected`);
-    
-    // Hide/show upload button based on level
+    updateLevelButton();
     updateFeatureUI();
     
-    // Slide gate up
     const gate = document.getElementById('gate');
-    if (gate) {
-        gate.style.transform = 'translateY(-100%)';
-    }
+    if (gate) gate.style.transform = 'translateY(-100%)';
     
-    // Start engine
     startEngine();
 };
 
-// UPDATE UI BASED ON LEVEL
-function updateFeatureUI() {
-    const features = FEATURES[engineMode];
-    const uploadBtn = document.querySelector('label[style*="📎"]');
-    
-    if (uploadBtn) {
-        // Hide upload for SMART and LITE
-        if (engineMode === 'SMART' || engineMode === 'LITE') {
-            uploadBtn.style.display = 'none';
-        } else {
-            uploadBtn.style.display = 'inline-block';
-        }
-    }
-    
-    // Log current level
-    console.log(`📱 Features enabled for ${engineMode}:`, features);
+// SWITCH LEVEL - Click button to go back to gate
+window.switchLevel = () => {
+    const gate = document.getElementById('gate');
+    if (gate) gate.style.transform = 'translateY(0)';
+    const chat = document.getElementById('chat');
+    if (chat) chat.innerHTML = '';
+};
+
+// UPDATE BUTTON WITH CURRENT LEVEL
+function updateLevelButton() {
+    const btn = document.getElementById('level-btn');
+    if (!btn) return;
+    const icons = { MAX: '💎', SMART: '📱', LITE: '⚡' };
+    btn.innerHTML = `${icons[engineMode]} ${engineMode}`;
+    btn.onclick = () => window.switchLevel();
 }
 
-// FILE UPLOAD - WITH LEVEL CHECK
+function updateFeatureUI() {
+    const uploadBtn = document.querySelector('label[style*="📎"]');
+    if (uploadBtn) {
+        uploadBtn.style.display = (engineMode === 'MAX' ? 'inline-block' : 'none');
+    }
+    console.log(`📱 Features for ${engineMode}:`, FEATURES[engineMode]);
+}
+
 const fIn = document.getElementById('f-in');
 if (fIn) {
     fIn.onchange = (e) => {
-        const features = FEATURES[engineMode];
-        
-        // Block upload for LITE and SMART
-        if (!features.images) {
-            alert(`❌ Image uploads not available in ${engineMode} mode\n\nSwitch to MAX to upload images`);
+        if (!FEATURES[engineMode].images) {
+            alert(`❌ No image upload in ${engineMode} mode\n\nSwitch to MAX to upload`);
             e.target.value = '';
             return;
         }
@@ -126,10 +122,8 @@ window.confirmUpload = async () => {
     }
 };
 
-// MESSAGE ENGINE
 function startEngine() {
-    const features = FEATURES[engineMode];
-    const lim = features.msgLimit;
+    const lim = FEATURES[engineMode].msgLimit;
     
     const q = query(
         collection(db, "messages"), 
@@ -141,17 +135,13 @@ function startEngine() {
     onSnapshot(q, (snap) => {
         const chat = document.getElementById('chat');
         chat.innerHTML = "";
-        
         snap.docs.reverse().forEach((doc) => {
-            const data = doc.data();
-            const msgElement = renderMessage(doc.id, data, 0);
+            const msgElement = renderMessage(doc.id, doc.data(), 0);
             chat.appendChild(msgElement);
         });
-        
         chat.scrollTop = chat.scrollHeight;
     });
 
-    // Wipe counter
     onSnapshot(collection(db, "stats"), (s) => {
         if (!s.empty) {
             document.getElementById('w-val').innerText = s.docs[0].data().count || 0;
@@ -159,45 +149,36 @@ function startEngine() {
     });
 }
 
-// RENDER MESSAGE WITH LEVEL-SPECIFIC FEATURES
 function renderMessage(msgId, data, depth = 0) {
     const features = FEATURES[engineMode];
     const container = document.createElement('div');
     container.className = `message-container depth-${Math.min(depth, 3)}`;
-    container.id = `msg-${msgId}`;
 
     const isMy = data.user === (document.getElementById('u-in').value || "Guest");
-    
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${isMy ? 'my-message' : 'other-message'}`;
     
     const header = document.createElement('div');
     header.className = 'message-header';
-    header.innerHTML = `
-        <span class="user-name">${data.user}</span>
-        <span class="timestamp">${formatTime(data.createdAt)}</span>
-    `;
+    header.innerHTML = `<span class="user-name">${data.user}</span><span class="timestamp">${formatTime(data.createdAt)}</span>`;
     bubble.appendChild(header);
 
-    // Reply indicator
     if (data.replyingToText) {
         const replyIndicator = document.createElement('div');
         replyIndicator.className = 'reply-indicator';
-        replyIndicator.innerHTML = `<strong>↳</strong> "${data.replyingToText.substring(0, 50)}${data.replyingToText.length > 50 ? '...' : ''}"`;
+        replyIndicator.innerHTML = `<strong>↳</strong> "${data.replyingToText.substring(0, 50)}..."`;
         bubble.appendChild(replyIndicator);
     }
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
     
-    // Text content (always shown)
     if (data.txt) {
         const textSpan = document.createElement('span');
         textSpan.textContent = data.txt;
         contentDiv.appendChild(textSpan);
     }
 
-    // File content - RESPECTS LEVEL
     if (data.file && features.images) {
         const fileType = data.fileType || '';
         if (fileType.startsWith('image/')) {
@@ -217,7 +198,6 @@ function renderMessage(msgId, data, depth = 0) {
     
     bubble.appendChild(contentDiv);
 
-    // Action buttons - Reply always available
     const actions = document.createElement('div');
     actions.className = 'message-actions';
     actions.innerHTML = `
@@ -226,15 +206,9 @@ function renderMessage(msgId, data, depth = 0) {
         ${isMy ? `<button class="action-btn delete-btn" onclick="deleteMessage('${msgId}')">🗑️</button>` : ''}
     `;
     bubble.appendChild(actions);
-    
     container.appendChild(bubble);
 
-    // Load nested replies
-    const repliesQuery = query(
-        collection(db, "messages"),
-        where('replyingToId', '==', msgId)
-    );
-
+    const repliesQuery = query(collection(db, "messages"), where('replyingToId', '==', msgId));
     onSnapshot(repliesQuery, (snapshot) => {
         let repliesContainer = container.querySelector('.replies-container');
         if (!repliesContainer) {
@@ -242,11 +216,9 @@ function renderMessage(msgId, data, depth = 0) {
             repliesContainer.className = 'replies-container';
             container.appendChild(repliesContainer);
         }
-        
         repliesContainer.innerHTML = '';
         snapshot.docs.forEach((replyDoc) => {
-            const replyData = replyDoc.data();
-            const replyElement = renderMessage(replyDoc.id, replyData, depth + 1);
+            const replyElement = renderMessage(replyDoc.id, replyDoc.data(), depth + 1);
             repliesContainer.appendChild(replyElement);
         });
     });
@@ -255,22 +227,14 @@ function renderMessage(msgId, data, depth = 0) {
 }
 
 window.replyToMessage = (msgId, msgText) => {
-    const features = FEATURES[engineMode];
-    if (!features.replies) {
-        alert(`❌ Replies not available in ${engineMode} mode`);
+    if (!FEATURES[engineMode].replies) {
+        alert(`❌ Replies not in ${engineMode} mode`);
         return;
     }
-    
     replyingToId = msgId;
     replyingToText = msgText;
     const rTag = document.getElementById('r-tag');
-    rTag.innerHTML = `
-        <div class="reply-tag-content">
-            <span class="reply-label">↩️ Replying to:</span>
-            <span class="reply-text">"${msgText.substring(0, 60)}${msgText.length > 60 ? '...' : ''}"</span>
-            <button class="close-reply" onclick="window.cancelReply()">✕</button>
-        </div>
-    `;
+    rTag.innerHTML = `<div class="reply-tag-content"><span class="reply-label">↩️ Replying to:</span><span class="reply-text">"${msgText.substring(0, 60)}..."</span><button class="close-reply" onclick="window.cancelReply()">✕</button></div>`;
     rTag.style.display = 'block';
     document.getElementById('m-in').focus();
 };
@@ -293,7 +257,6 @@ window.sendMessage = async () => {
             replyingToId: replyingToId,
             replyingToText: replyingToText
         });
-
         input.value = "";
         window.cancelReply();
     } catch (error) {
@@ -303,7 +266,6 @@ window.sendMessage = async () => {
 
 window.pinMessage = (msgId) => {
     console.log(`📌 Pinned: ${msgId}`);
-    // Can be extended with Firebase
 };
 
 window.deleteMessage = async (msgId) => {
@@ -316,8 +278,7 @@ window.deleteMessage = async (msgId) => {
 };
 
 window.wipeAllData = async () => {
-    if (!confirm("🚨 Delete ALL messages forever?")) return;
-    
+    if (!confirm("🚨 Delete ALL messages?")) return;
     try {
         const snap = await getDocs(collection(db, "messages"));
         snap.forEach(async (d) => await deleteDoc(d.ref));
@@ -327,7 +288,6 @@ window.wipeAllData = async () => {
             const cur = statsSnap.docs[0].data().count || 0;
             await updateDoc(statsSnap.docs[0].ref, { count: cur + 1 });
         }
-        
         alert('✓ Wiped');
     } catch (error) {
         console.error('Wipe error:', error);
@@ -355,11 +315,9 @@ function formatTime(timestamp) {
     if (minutes < 60) return `${minutes}m`;
     if (hours < 24) return `${hours}h`;
     if (days < 7) return `${days}d`;
-    
     return date.toLocaleDateString();
 }
 
-// Enter key to send
 document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('m-in');
     if (input) {
@@ -372,4 +330,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-console.log('✅ App loaded - Select a level to start');
+console.log('✅ App ready - Click a level to start!');

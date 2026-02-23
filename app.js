@@ -12,32 +12,80 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const st = getStorage(app);
 
+// GLOBAL STATE
 let engineMode = 'MAX';
 let replyingToId = null;
 let replyingToText = null;
 let fileToUpload = null;
 
-// BOOT SYSTEM - YOUR ORIGINAL (KEPT EXACTLY)
+// FEATURE ACCESS LEVELS
+const FEATURES = {
+    MAX: { text: true, images: true, videos: true, pdfs: true, replies: true, pin: true, emojis: true, msgLimit: 100 },
+    SMART: { text: true, images: true, videos: false, pdfs: false, replies: true, pin: true, emojis: true, msgLimit: 50 },
+    LITE: { text: true, images: false, videos: false, pdfs: false, replies: true, pin: true, emojis: true, msgLimit: 20 }
+};
+
+// BOOT SYSTEM
 window.boot = (m) => {
     engineMode = m;
-    document.getElementById('gate').style.transform = 'translateY(-100%)';
+    console.log(`🚀 Boot: ${m} level selected`);
+    
+    // Hide/show upload button based on level
+    updateFeatureUI();
+    
+    // Slide gate up
+    const gate = document.getElementById('gate');
+    if (gate) {
+        gate.style.transform = 'translateY(-100%)';
+    }
+    
+    // Start engine
     startEngine();
 };
 
-// IMAGE UPLOAD WITH PREVIEW
-const fIn = document.getElementById('f-in');
-fIn.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+// UPDATE UI BASED ON LEVEL
+function updateFeatureUI() {
+    const features = FEATURES[engineMode];
+    const uploadBtn = document.querySelector('label[style*="📎"]');
     
-    fileToUpload = file;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        document.getElementById('pop-img').src = ev.target.result;
-        document.getElementById('media-pop').style.display = 'flex';
+    if (uploadBtn) {
+        // Hide upload for SMART and LITE
+        if (engineMode === 'SMART' || engineMode === 'LITE') {
+            uploadBtn.style.display = 'none';
+        } else {
+            uploadBtn.style.display = 'inline-block';
+        }
+    }
+    
+    // Log current level
+    console.log(`📱 Features enabled for ${engineMode}:`, features);
+}
+
+// FILE UPLOAD - WITH LEVEL CHECK
+const fIn = document.getElementById('f-in');
+if (fIn) {
+    fIn.onchange = (e) => {
+        const features = FEATURES[engineMode];
+        
+        // Block upload for LITE and SMART
+        if (!features.images) {
+            alert(`❌ Image uploads not available in ${engineMode} mode\n\nSwitch to MAX to upload images`);
+            e.target.value = '';
+            return;
+        }
+        
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        fileToUpload = file;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            document.getElementById('pop-img').src = ev.target.result;
+            document.getElementById('media-pop').style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
     };
-    reader.readAsDataURL(file);
-};
+}
 
 window.cancelUpload = () => {
     fileToUpload = null;
@@ -78,9 +126,11 @@ window.confirmUpload = async () => {
     }
 };
 
-// YOUTUBE-STYLE MESSAGE ENGINE WITH NESTED REPLIES
+// MESSAGE ENGINE
 function startEngine() {
-    const lim = engineMode === 'LITE' ? 20 : engineMode === 'SMART' ? 50 : 100;
+    const features = FEATURES[engineMode];
+    const lim = features.msgLimit;
+    
     const q = query(
         collection(db, "messages"), 
         where('replyingToId', '==', null),
@@ -101,6 +151,7 @@ function startEngine() {
         chat.scrollTop = chat.scrollHeight;
     });
 
+    // Wipe counter
     onSnapshot(collection(db, "stats"), (s) => {
         if (!s.empty) {
             document.getElementById('w-val').innerText = s.docs[0].data().count || 0;
@@ -108,8 +159,9 @@ function startEngine() {
     });
 }
 
-// RENDER MESSAGE WITH NESTED REPLIES (YouTube-style)
+// RENDER MESSAGE WITH LEVEL-SPECIFIC FEATURES
 function renderMessage(msgId, data, depth = 0) {
+    const features = FEATURES[engineMode];
     const container = document.createElement('div');
     container.className = `message-container depth-${Math.min(depth, 3)}`;
     container.id = `msg-${msgId}`;
@@ -127,6 +179,7 @@ function renderMessage(msgId, data, depth = 0) {
     `;
     bubble.appendChild(header);
 
+    // Reply indicator
     if (data.replyingToText) {
         const replyIndicator = document.createElement('div');
         replyIndicator.className = 'reply-indicator';
@@ -137,13 +190,15 @@ function renderMessage(msgId, data, depth = 0) {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
     
+    // Text content (always shown)
     if (data.txt) {
         const textSpan = document.createElement('span');
         textSpan.textContent = data.txt;
         contentDiv.appendChild(textSpan);
     }
 
-    if (data.file) {
+    // File content - RESPECTS LEVEL
+    if (data.file && features.images) {
         const fileType = data.fileType || '';
         if (fileType.startsWith('image/')) {
             const img = document.createElement('img');
@@ -151,7 +206,7 @@ function renderMessage(msgId, data, depth = 0) {
             img.className = 'message-image';
             img.onclick = () => window.open(data.file);
             contentDiv.appendChild(img);
-        } else if (fileType.startsWith('video/')) {
+        } else if (fileType.startsWith('video/') && features.videos) {
             const video = document.createElement('video');
             video.src = data.file;
             video.controls = true;
@@ -162,16 +217,19 @@ function renderMessage(msgId, data, depth = 0) {
     
     bubble.appendChild(contentDiv);
 
+    // Action buttons - Reply always available
     const actions = document.createElement('div');
     actions.className = 'message-actions';
     actions.innerHTML = `
-        <button class="action-btn" onclick="replyToMessage('${msgId}', '${escapeQuotes(data.txt || 'Image')}')">↩️</button>
+        <button class="action-btn" onclick="replyToMessage('${msgId}', '${escapeQuotes(data.txt || 'Message')}')">↩️</button>
+        ${features.pin ? `<button class="action-btn" onclick="pinMessage('${msgId}')">📌</button>` : ''}
         ${isMy ? `<button class="action-btn delete-btn" onclick="deleteMessage('${msgId}')">🗑️</button>` : ''}
     `;
     bubble.appendChild(actions);
     
     container.appendChild(bubble);
 
+    // Load nested replies
     const repliesQuery = query(
         collection(db, "messages"),
         where('replyingToId', '==', msgId)
@@ -197,6 +255,12 @@ function renderMessage(msgId, data, depth = 0) {
 }
 
 window.replyToMessage = (msgId, msgText) => {
+    const features = FEATURES[engineMode];
+    if (!features.replies) {
+        alert(`❌ Replies not available in ${engineMode} mode`);
+        return;
+    }
+    
     replyingToId = msgId;
     replyingToText = msgText;
     const rTag = document.getElementById('r-tag');
@@ -219,7 +283,7 @@ window.cancelReply = () => {
 
 window.sendMessage = async () => {
     const input = document.getElementById('m-in');
-    if (!input.value.trim() && !fileToUpload) return;
+    if (!input.value.trim()) return;
 
     try {
         await addDoc(collection(db, "messages"), {
@@ -235,6 +299,11 @@ window.sendMessage = async () => {
     } catch (error) {
         console.error('Send error:', error);
     }
+};
+
+window.pinMessage = (msgId) => {
+    console.log(`📌 Pinned: ${msgId}`);
+    // Can be extended with Firebase
 };
 
 window.deleteMessage = async (msgId) => {
@@ -269,10 +338,6 @@ window.toggleSidebar = () => {
     document.getElementById('side').classList.toggle('open');
 };
 
-window.hideSidebar = () => {
-    document.getElementById('side').classList.remove('open');
-};
-
 function escapeQuotes(str) {
     return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
 }
@@ -294,6 +359,7 @@ function formatTime(timestamp) {
     return date.toLocaleDateString();
 }
 
+// Enter key to send
 document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('m-in');
     if (input) {
@@ -305,3 +371,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+console.log('✅ App loaded - Select a level to start');

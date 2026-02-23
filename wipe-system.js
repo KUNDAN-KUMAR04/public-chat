@@ -1,91 +1,70 @@
 /**
- * 🗑️ WIPE SYSTEM FEATURE
- * Global wipe all messages, track wipe count
- * EVERYTHING about wiping in ONE file
+ * 🗑️ WIPE SYSTEM — Delete all messages, track wipe count
+ * Fixed: removed broken dynamic import inside method
  */
 
-import { collection, getDocs, deleteDoc, serverTimestamp, setDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+    collection, getDocs, deleteDoc, setDoc, doc,
+    onSnapshot, query, getDoc, updateDoc, increment
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-class WipeSystemFeature {
-    constructor() {
-        this.init();
-    }
+// ── Boot listener ─────────────────────────────────────────────────────────────
+window.addEventListener('engine-booted', () => {
+    subscribeWipeCounter();
+});
 
-    init() {
-        this.setupWipeButton();
-        this.setupEngineListener();
-    }
-
-    setupWipeButton() {
-        const wipeBtn = document.querySelector('[onclick*="wipeAllData"]');
-        if (wipeBtn) {
-            wipeBtn.addEventListener('click', () => this.wipeAllData());
-        }
-    }
-
-    setupEngineListener() {
-        window.addEventListener('engine-booted', () => {
-            this.loadWipeCounter();
-        });
-    }
-
-    async wipeAllData() {
-        if (!confirm("⚠️ WIPE ALL MESSAGES? This cannot be undone!")) {
-            return;
-        }
-
-        if (!confirm("🚨 Are you SURE? ALL messages will be deleted for everyone!")) {
-            return;
-        }
-
-        try {
-            window.dispatchEvent(new CustomEvent('start-loading', { detail: { text: 'Wiping...' } }));
-
-            // Delete all messages
-            const snap = await getDocs(collection(window.db, "messages"));
-            await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-
-            // Increment wipe counter
-            const statsRef = collection(window.db, "stats");
-            const statsSnap = await getDocs(statsRef);
-            
-            if (!statsSnap.empty) {
-                const cur = statsSnap.docs[0].data().count || 0;
-                await setDoc(statsSnap.docs[0].ref, { count: cur + 1 });
-            } else {
-                await setDoc(doc(statsRef), { count: 1 });
-            }
-
-            window.dispatchEvent(new CustomEvent('stop-loading'));
-            alert('✅ Chat wiped successfully');
-        } catch (error) {
-            console.error('Wipe error:', error);
-            window.dispatchEvent(new CustomEvent('stop-loading'));
-            alert('❌ Wipe failed');
-        }
-    }
-
-    loadWipeCounter() {
-        // Listen for wipe count updates
-        import { onSnapshot, query, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        const q = query(collection(window.db, "stats"));
-        onSnapshot(q, (snap) => {
-            if (!snap.empty) {
-                const count = snap.docs[0].data().count || 0;
-                const wValEl = document.getElementById('w-val');
-                if (wValEl) {
-                    wValEl.innerText = count;
-                }
-            }
-        });
-    }
+// ── Subscribe to wipe counter ─────────────────────────────────────────────────
+function subscribeWipeCounter() {
+    const statsRef = doc(window.db, 'stats', 'global');
+    onSnapshot(statsRef, (snap) => {
+        const count = snap.exists() ? (snap.data().wipes || 0) : 0;
+        const el = document.getElementById('w-val');
+        if (el) el.textContent = count;
+    });
 }
 
-// Initialize
-window.wipeSystemFeature = new WipeSystemFeature();
+// ── Wipe all data ─────────────────────────────────────────────────────────────
+window.wipeAllData = async () => {
+    if (!confirm('⚠️ Delete ALL messages? This cannot be undone!')) return;
+    if (!confirm('🚨 Final confirm: ALL messages gone for everyone!')) return;
 
-// Global function
-window.wipeAllData = () => window.wipeSystemFeature.wipeAllData();
+    const wipeBtn = document.querySelector('.wipe-btn');
+    if (wipeBtn) { wipeBtn.disabled = true; wipeBtn.textContent = '⏳ Wiping…'; }
+
+    try {
+        // Delete messages in batches
+        const snap = await getDocs(collection(window.db, 'messages'));
+        const chunks = chunkArray(snap.docs, 20);
+        for (const chunk of chunks) {
+            await Promise.all(chunk.map(d => deleteDoc(d.ref)));
+        }
+
+        // Delete pins too
+        const pinsSnap = await getDocs(collection(window.db, 'pins'));
+        await Promise.all(pinsSnap.docs.map(d => deleteDoc(d.ref)));
+
+        // Increment wipe counter
+        const statsRef = doc(window.db, 'stats', 'global');
+        const statsSnap = await getDoc(statsRef);
+        if (statsSnap.exists()) {
+            await updateDoc(statsRef, { wipes: increment(1) });
+        } else {
+            await setDoc(statsRef, { wipes: 1 });
+        }
+
+        window.showToast?.('✅ Chat wiped');
+    } catch (err) {
+        console.error('Wipe error:', err);
+        alert('❌ Wipe failed. Check console.');
+    } finally {
+        if (wipeBtn) { wipeBtn.disabled = false; wipeBtn.textContent = '🗑️ WIPE CHAT'; }
+    }
+};
+
+function chunkArray(arr, size) {
+    const chunks = [];
+    for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+    return chunks;
+}
 
 console.log('✅ Wipe system module loaded');

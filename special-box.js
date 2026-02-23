@@ -1,88 +1,143 @@
 /**
- * 📌 SPECIAL BOX FEATURE
- * Sidebar, pinning messages, managing pinned items
- * EVERYTHING about special box in ONE file
+ * 📌 SPECIAL BOX — Sidebar with pinned messages, outside-click-to-close
  */
 
-class SpecialBoxFeature {
-    constructor() {
-        this.pinnedMessages = [];
-        this.init();
-    }
+import {
+    collection, addDoc, deleteDoc, onSnapshot, serverTimestamp, doc, query, orderBy
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-    init() {
-        this.setupSidebarHandlers();
-        this.setupEngineListener();
-    }
+let unsubPins = null;
 
-    setupSidebarHandlers() {
-        const toggleBtn = document.querySelector('[onclick*="toggleSidebar"]');
-        const closeBtn = document.querySelector('[onclick*="hideSidebar"]');
+window.addEventListener('engine-booted', () => {
+    setupSidebar();
+    subscribeTopins();
+});
 
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', () => this.toggleSidebar());
-        }
-
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.hideSidebar());
-        }
-    }
-
-    setupEngineListener() {
-        window.addEventListener('engine-booted', () => {
-            this.loadPinnedMessages();
+// ── Sidebar open/close ────────────────────────────────────────────────────────
+window.toggleSidebar = () => {
+    const side = document.getElementById('side');
+    if (!side) return;
+    const isOpen = side.classList.toggle('open');
+    if (isOpen) {
+        // Close on outside click
+        requestAnimationFrame(() => {
+            const handler = (e) => {
+                if (!side.contains(e.target) && !document.getElementById('sidebar-toggle')?.contains(e.target)) {
+                    closeSidebar();
+                    document.removeEventListener('click', handler);
+                }
+            };
+            document.addEventListener('click', handler);
         });
     }
+};
 
-    toggleSidebar() {
-        const side = document.getElementById('side');
-        if (side) {
-            side.classList.toggle('open');
-        }
-    }
-
-    hideSidebar() {
-        const side = document.getElementById('side');
-        if (side) {
-            side.classList.remove('open');
-        }
-    }
-
-    loadPinnedMessages() {
-        const pinList = document.getElementById('pin-list');
-        if (!pinList) return;
-
-        // For now, show empty state
-        pinList.innerHTML = '<p style="color:#999; text-align:center; padding:20px;">No pinned messages yet</p>';
-    }
-
-    pinMessage(msgId, msgText) {
-        console.log(`📌 Pinned: ${msgText}`);
-        // Can be extended with Firebase storage for pinned messages
-    }
-
-    unpinMessage(msgId) {
-        console.log(`❌ Unpinned: ${msgId}`);
-    }
-
-    clearAllPins() {
-        if (confirm('Clear all pinned messages?')) {
-            const pinList = document.getElementById('pin-list');
-            if (pinList) {
-                pinList.innerHTML = '<p style="color:#999; text-align:center; padding:20px;">No pinned messages yet</p>';
-            }
-            console.log('✅ All pins cleared');
-        }
-    }
+function closeSidebar() {
+    document.getElementById('side')?.classList.remove('open');
 }
 
-// Initialize
-window.specialBoxFeature = new SpecialBoxFeature();
+window.hideSidebar = closeSidebar;
 
-// Global access functions
-window.toggleSidebar = () => window.specialBoxFeature.toggleSidebar();
-window.hideSidebar = () => window.specialBoxFeature.hideSidebar();
-window.pinMessage = (id, text) => window.specialBoxFeature.pinMessage(id, text);
-window.clearAllPins = () => window.specialBoxFeature.clearAllPins();
+// ── Sidebar init ──────────────────────────────────────────────────────────────
+function setupSidebar() {
+    // ESC key closes sidebar
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSidebar();
+    });
+}
+
+// ── Pin a message ─────────────────────────────────────────────────────────────
+window.pinMessage = async (msgId) => {
+    const el   = document.querySelector(`[data-msg-id="${msgId}"]`);
+    const text = el?.querySelector('.msg-text')?.textContent || '📎 File';
+    const user = el?.dataset.user || 'Guest';
+
+    try {
+        await addDoc(collection(window.db, 'pins'), {
+            msgId, text, user,
+            pinnedAt: serverTimestamp()
+        });
+        showToast('📌 Message pinned');
+    } catch (err) {
+        console.error('Pin error:', err);
+    }
+};
+
+window.unpinMessage = async (pinDocId) => {
+    try {
+        await deleteDoc(doc(window.db, 'pins', pinDocId));
+    } catch (err) {
+        console.error('Unpin error:', err);
+    }
+};
+
+// ── Subscribe to pins ─────────────────────────────────────────────────────────
+function subscribeTopins() {
+    if (unsubPins) unsubPins();
+
+    const q = query(collection(window.db, 'pins'), orderBy('pinnedAt', 'desc'));
+    unsubPins = onSnapshot(q, (snap) => {
+        renderPinList(snap.docs);
+    });
+}
+
+function renderPinList(docs) {
+    const pinList = document.getElementById('pin-list');
+    if (!pinList) return;
+
+    if (docs.length === 0) {
+        pinList.innerHTML = '<p class="pin-empty">No pinned messages yet.<br>Pin a message using the 📌 button.</p>';
+        return;
+    }
+
+    pinList.innerHTML = '';
+    docs.forEach(d => {
+        const data = d.data();
+        const item = document.createElement('div');
+        item.className = 'pin-item';
+        item.innerHTML = `
+            <div class="pin-content">
+                <span class="pin-user">${escHtml(data.user)}</span>
+                <span class="pin-text">${escHtml(truncate(data.text, 80))}</span>
+            </div>
+            <button class="pin-remove" onclick="window.unpinMessage('${d.id}')" title="Unpin">✕</button>
+        `;
+        // Click to scroll to message
+        item.querySelector('.pin-content').onclick = () => {
+            closeSidebar();
+            const msgEl = document.querySelector(`[data-msg-id="${data.msgId}"]`);
+            if (msgEl) {
+                msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                msgEl.querySelector('.msg-bubble')?.classList.add('flash');
+                setTimeout(() => msgEl.querySelector('.msg-bubble')?.classList.remove('flash'), 1500);
+            }
+        };
+        pinList.appendChild(item);
+    });
+}
+
+// ── Toast helper ──────────────────────────────────────────────────────────────
+function showToast(msg) {
+    let toast = document.getElementById('toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.add('toast-show');
+    setTimeout(() => toast.classList.remove('toast-show'), 2500);
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function truncate(s, n) {
+    return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+window.showToast = showToast;
 
 console.log('✅ Special box module loaded');

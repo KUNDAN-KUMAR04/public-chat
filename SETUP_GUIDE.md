@@ -1,265 +1,211 @@
-# 🎯 ULTRA MAX GLOBAL - FEATURE-BASED SETUP
+# 🌍 ULTRA MAX GLOBAL — Setup Guide v3.0
 
-## ✨ WHAT YOU HAVE
+## ✨ What's New in v3.0
 
-**Each feature is COMPLETELY in ONE file** (JS + CSS together):
-
-```
-📄 index.html           (Minimal HTML - loads all features)
-📄 config.js            (Firebase credentials)
-📄 style.css            (Base styling)
-
-🔧 FEATURE FILES (Each is COMPLETE):
-  📌 core.js            (Gate, Boot, Firebase init)
-  💬 messages.js        (Send/display messages)
-  📁 file-upload.js     (Upload + loading indicator)
-  📌 special-box.js     (Sidebar, pinning)
-  😀 emoji-support.js   (Emoji fonts)
-  👥 active-users.js    (User counter: Basic/Medium/Max/Ultra)
-  🗑️ wipe-system.js      (Global wipe, counter)
-
-🎨 CSS FILES (One per feature):
-  file-upload.css       (Loading spinner)
-  active-users.css      (User status indicator)
-  (Other features in same .js file)
-
-📦 Other:
-  sw.js                 (Service worker)
-  manifest.json         (PWA config)
-```
+| Feature | Status |
+|---|---|
+| 😊 Reactions (👍❤️😂 etc.) | ✅ New |
+| ✏️ Edit messages | ✅ New |
+| ⌨️ Typing indicator | ✅ New |
+| 👁️ Read receipts | ✅ New |
+| 🔍 Message search (Ctrl+F) | ✅ New |
+| 🌙 Dark mode toggle | ✅ New |
+| 🎨 User color customization | ✅ New |
+| 🌳 Improved reply tree | ✅ Improved |
+| 📁 All file types (video/audio/pdf/zip…) | ✅ Improved |
+| 👥 Real cross-device online count | ✅ Fixed |
+| 🗑️ Wipe system (broken import fixed) | ✅ Fixed |
+| 📌 Sidebar outside-click-to-close | ✅ Fixed |
+| ⚠️ config.js placeholder | ✅ Added |
+| 🏗️ Clean module architecture | ✅ Improved |
 
 ---
 
-## 🚀 QUICK START
+## 🚀 Quick Start
 
-### Step 1: Update config.js
-```javascript
+### Step 1 — Fill in `config.js`
+```js
 export const firebaseConfig = {
-    apiKey: "YOUR_REAL_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    // ... other values from Firebase Console
+    apiKey:            "YOUR_REAL_API_KEY",
+    authDomain:        "YOUR_PROJECT.firebaseapp.com",
+    projectId:         "YOUR_PROJECT_ID",
+    storageBucket:     "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId:             "YOUR_APP_ID"
 };
 ```
+Get these from: **Firebase Console → Your Project → Project Settings → Your Apps**
 
-### Step 2: Deploy
-- Upload all files to GitHub Pages, Vercel, or Firebase Hosting
-- Wait for deployment
-- Hard refresh: `Ctrl+Shift+R`
+### Step 2 — Firestore Security Rules
+In Firebase Console → Firestore → Rules, paste:
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /messages/{doc}  { allow read, write: if true; }
+    match /pins/{doc}      { allow read, write: if true; }
+    match /stats/{doc}     { allow read, write: if true; }
+    match /presence/{doc}  { allow read, write: if true; }
+    match /typing/{doc}    { allow read, write: if true; }
+  }
+}
+```
+*(Tighten these with auth rules when you're ready)*
 
-### Step 3: Test
-1. Page loads → See blue gate
-2. Click a tier → Gate closes
-3. Type message → Click send
-4. Upload file → Preview → Send
-5. See loading spinner while uploading
-6. See active users in bottom-left (color-coded)
-7. Click wipe button → Messages deleted, counter increments
+### Step 3 — Storage Rules
+In Firebase Console → Storage → Rules:
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /media/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 52428800; // 50MB max
+    }
+  }
+}
+```
 
----
+### Step 4 — Deploy
+Upload all files to **GitHub Pages**, **Vercel**, or **Firebase Hosting**.
 
-## 📁 FILE ORGANIZATION
-
-### Why This Is Better
-
-**OLD WAY:**
-- messages.css (only styling)
-- messages.js (only logic)
-- Hard to find "where's the message feature?"
-- Styling in one place, logic in another
-
-**NEW WAY:**
-- messages.js (EVERYTHING about messages)
-- file-upload.js (EVERYTHING about file upload)
-- emoji-support.js (EVERYTHING about emojis)
-- Easy to find: "Reply stuff? Go to reply-system.js"
-- All related code in ONE place
-
----
-
-## ✅ EACH FEATURE EXPLAINED
-
-### **core.js**
-- Gate selection (MAX/SMART/LITE)
-- Firebase initialization
-- Boot system
-- **Dependencies:** None
-- **Loads before:** Everything else
-
-### **messages.js**
-- Send messages
-- Display messages  
-- Reply system
-- Message rendering
-- **Depends on:** core.js
-- **CSS:** Inline in style.css
-
-### **file-upload.js**
-- File selection
-- Preview popup
-- Upload to Firebase
-- **Includes:** Loading indicator logic
-- **CSS:** file-upload.css
-- **Depends on:** core.js
-
-### **special-box.js**
-- Sidebar toggle
-- Pinning messages (framework ready)
-- Clear pins button
-- **Depends on:** core.js
-
-### **emoji-support.js**
-- Font stack injection
-- Emoji rendering on all platforms
-- No dependencies, can run anytime
-
-### **active-users.js**
-- Track online users
-- Color-coded status (Basic/Medium/Max/Ultra)
-- localStorage-based tracking
-- **CSS:** active-users.css
-
-### **wipe-system.js**
-- Delete all messages
-- Increment wipe counter
-- Confirmation dialogs
-- **Depends on:** core.js
+### Step 5 — Hard refresh
+`Ctrl + Shift + R` (or `Cmd + Shift + R` on Mac)
 
 ---
 
-## 🔧 ADDING A NEW FEATURE
+## 📁 File Structure
 
-To add a new feature (e.g., Dark Mode):
+```
+📄 index.html           Main HTML — clean, semantic
+📄 config.js            ⚠️ Your Firebase credentials (never commit!)
+📄 style.css            All styles, CSS variables, dark mode
+📄 manifest.json        PWA config
+📄 sw.js                Service worker (offline/caching)
 
-### 1. Create `dark-mode.js`
-```javascript
-class DarkModeFeature {
+🔧 CORE MODULES:
+  core.js               Firebase init, boot, FEATURES config
+  app.js                Entry point — imports all modules in order
+
+💬 FEATURE MODULES:
+  messages.js           Send/receive/edit/delete, reply tree
+  file-upload.js        All file types with progress bar
+  reactions.js          Emoji reactions on messages
+  typing-indicator.js   "X is typing…" via Firestore
+  read-receipts.js      Seen status via IntersectionObserver
+  message-search.js     Full-text search (Ctrl+F)
+  dark-mode.js          Dark/light toggle + system preference
+  user-colors.js        Color picker per username
+  active-users.js       Real cross-device presence (Firestore)
+  special-box.js        Sidebar, pinning, outside-click-close
+  wipe-system.js        Wipe chat + counter (fixed import bug)
+  emoji-support.js      Font stack for emoji rendering
+```
+
+---
+
+## 🎮 Features Guide
+
+### Reactions
+- Hover a message → click 😊 button → pick emoji
+- Click a reaction pill to toggle your reaction
+- One reaction per user per message
+
+### Edit Messages
+- Hover your own message → click ✏️
+- Input bar shows orange "Editing" tag
+- Press Enter or ✔ to save, Escape to cancel
+
+### Typing Indicator
+- Automatically shows when you type
+- Clears 3 seconds after you stop typing
+- Shows up to 3 names: "Alice, Bob are typing…"
+
+### Message Search
+- Click 🔍 in nav or press `Ctrl+F` / `Cmd+F`
+- Searches message text and usernames
+- Click result to scroll to that message
+
+### Dark Mode
+- Click ☀️/🌙 button in nav
+- Automatically follows system preference on first load
+- Your choice is remembered
+
+### User Colors
+- Click the colored dot next to your username input
+- Pick from 12 presets or use custom color picker
+- Your color shows on your avatar and username
+
+### Reply Tree
+- Click ↩ on any message to reply to it
+- Replies nest visually up to 4 levels deep
+- Click a reply quote to scroll to the original
+
+### File Uploads
+- Click 📎 to attach files
+- MAX mode: images, video, audio, PDF, docs, zip (up to 50MB)
+- SMART mode: images, video, audio, PDF
+- LITE mode: images only
+- Preview before sending with optional caption
+
+### Read Receipts
+- Messages you send show "👁 Seen by X" when others read them
+- Based on IntersectionObserver (no polling)
+
+---
+
+## 🔧 Adding New Features
+
+```js
+// 1. Create my-feature.js
+class MyFeature {
     constructor() {
         this.init();
     }
-
     init() {
-        this.setupToggle();
-        console.log('✅ Dark mode loaded');
-    }
-
-    setupToggle() {
-        // Add toggle button, handle clicks
+        window.addEventListener('engine-booted', ({ detail }) => {
+            console.log('My feature started in', detail.mode);
+        });
     }
 }
+window.myFeature = new MyFeature();
+export default window.myFeature;
 
-window.darkModeFeature = new DarkModeFeature();
+// 2. Add to app.js
+import './my-feature.js';
 ```
 
-### 2. Create `dark-mode.css`
-```css
-/* Dark mode styles */
-body.dark-mode {
-    background: #1a1a1a;
-    color: #f1f1f1;
-}
-```
+---
 
-### 3. Add to `index.html`
-```html
-<script type="module" src="dark-mode.js"></script>
-<link rel="stylesheet" href="dark-mode.css">
-```
+## 🔥 Firestore Collections
 
-Done! New feature is modular and independent.
+| Collection | Purpose |
+|---|---|
+| `messages` | All chat messages |
+| `pins` | Pinned messages |
+| `stats` | Wipe counter (`stats/global`) |
+| `presence` | Online users (real-time) |
+| `typing` | Typing indicators |
 
 ---
 
-## 🎯 HOW FEATURES COMMUNICATE
+## 🐛 Troubleshooting
 
-Each feature listens for events:
+**App crashes on load?**
+→ Check `config.js` has your real Firebase values
 
-```javascript
-// In any feature file
-window.addEventListener('engine-booted', (e) => {
-    console.log('Engine booted with mode:', e.detail.mode);
-    // Start your feature now
-});
+**Messages not sending?**
+→ Check Firestore rules allow write access
+→ Open browser console (F12) for errors
 
-// Dispatch your own events
-window.dispatchEvent(new CustomEvent('start-loading', {
-    detail: { text: 'Uploading...' }
-}));
-```
+**Files not uploading?**
+→ Check Firebase Storage rules
+→ Verify Storage bucket name in `config.js`
 
-This keeps features independent while allowing communication.
+**Reactions/typing not working?**
+→ Add `presence` and `typing` collections to Firestore rules
 
----
+**Active users always shows 1?**
+→ Now uses Firestore — make sure `presence` collection is allowed
 
-## 🚨 TROUBLESHOOTING
-
-### Message not sending?
-1. Check `messages.js` is imported
-2. Check config.js has Firebase values
-3. Check console for errors (F12)
-
-### Loading spinner not showing?
-1. Check `file-upload.js` imported
-2. Check `file-upload.css` linked
-3. Check browser console
-
-### Active users not showing?
-1. Check `active-users.js` imported
-2. Check `active-users.css` linked
-3. Check localStorage is enabled
-
-### Everything broken?
-1. Hard refresh: `Ctrl+Shift+R`
-2. Check all imports in HTML are correct
-3. Check console errors (F12)
-4. Verify Firebase is initialized
-
----
-
-## ✨ ADVANTAGES
-
-✅ **One feature per file** - Super organized  
-✅ **Easy to find things** - Message stuff? Go to messages.js  
-✅ **Easy to add features** - Just create new .js + .css  
-✅ **Easy to remove features** - Delete 1 JS + 1 CSS  
-✅ **No conflicts** - Features don't interfere  
-✅ **Professional structure** - Industry standard  
-✅ **Scalable** - Easy to grow  
-
----
-
-## 📝 FILE SIZES
-
-- `core.js` ~ 800 bytes
-- `messages.js` ~ 2.5 KB
-- `file-upload.js` ~ 2 KB
-- `special-box.js` ~ 1 KB
-- `emoji-support.js` ~ 600 bytes
-- `active-users.js` ~ 1.5 KB
-- `wipe-system.js` ~ 1.5 KB
-- **Total** ~ 10 KB (very light!)
-
----
-
-## 🎉 YOU'RE ALL SET!
-
-**Your app now has:**
-- ✅ Clean feature-based organization
-- ✅ Each feature isolated and independent
-- ✅ Easy to maintain and extend
-- ✅ Professional architecture
-- ✅ All features working together
-
-**Go deploy and enjoy!** 🚀
-
----
-
-## 📞 SUPPORT
-
-If something doesn't work:
-1. Check console (F12) for errors
-2. Verify import order in HTML (correct!)
-3. Check Firebase config has real values
-4. Try hard refresh (Ctrl+Shift+R)
-
-**Remember:** Each feature works independently. If one breaks, others still work!
+**Hard refresh:** `Ctrl+Shift+R` clears service worker cache

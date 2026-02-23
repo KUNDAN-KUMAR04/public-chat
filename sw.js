@@ -1,10 +1,9 @@
-// SERVICE WORKER - Ultra Max Global
-// Handles caching, offline support, and background sync
+// SERVICE WORKER — Ultra Max Global v3.0
+// Strategy: Cache-first for static assets, Network-first for API
 
-const CACHE_VERSION = 'um-global-v2.0';
-const CACHE_STATIC = `${CACHE_VERSION}-static`;
-const CACHE_DYNAMIC = `${CACHE_VERSION}-dynamic`;
-const CACHE_IMAGES = `${CACHE_VERSION}-images`;
+const CACHE_VERSION = 'um-global-v3';
+const STATIC_CACHE  = `${CACHE_VERSION}-static`;
+const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 
 const STATIC_ASSETS = [
     './',
@@ -12,136 +11,90 @@ const STATIC_ASSETS = [
     './style.css',
     './app.js',
     './config.js',
+    './core.js',
+    './messages.js',
+    './file-upload.js',
+    './reactions.js',
+    './typing-indicator.js',
+    './read-receipts.js',
+    './message-search.js',
+    './dark-mode.js',
+    './user-colors.js',
+    './active-users.js',
+    './special-box.js',
+    './wipe-system.js',
+    './emoji-support.js',
     './manifest.json'
 ];
 
-// INSTALL EVENT - Cache static assets
+// ── Install ────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
-    console.log('SW: Installing...');
     event.waitUntil(
-        (async () => {
-            try {
-                const cache = await caches.open(CACHE_STATIC);
-                await cache.addAll(STATIC_ASSETS);
-                console.log('✓ Static assets cached');
-                self.skipWaiting();
-            } catch (e) {
-                console.error('Cache installation error:', e);
-            }
-        })()
+        caches.open(STATIC_CACHE)
+            .then(cache => cache.addAll(STATIC_ASSETS))
+            .then(() => self.skipWaiting())
+            .catch(err => console.error('SW install error:', err))
     );
 });
 
-// ACTIVATE EVENT - Cleanup old caches
+// ── Activate ───────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
-    console.log('SW: Activating...');
     event.waitUntil(
-        (async () => {
-            const cacheNames = await caches.keys();
-            await Promise.all(
-                cacheNames.map(name => {
-                    if (!name.includes(CACHE_VERSION)) {
-                        console.log(`✓ Removed old cache: ${name}`);
-                        return caches.delete(name);
-                    }
-                })
-            );
-            self.clients.claim();
-        })()
+        caches.keys()
+            .then(keys => Promise.all(
+                keys.filter(k => !k.startsWith(CACHE_VERSION))
+                    .map(k => caches.delete(k))
+            ))
+            .then(() => self.clients.claim())
     );
 });
 
-// FETCH EVENT - Intelligent caching strategy
+// ── Fetch ──────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Skip Firebase Firestore/Storage requests - let them go directly
-    if (url.origin.includes('firebaseio') || url.origin.includes('firebasestorage') || url.origin.includes('googleapis')) {
-        event.respondWith(fetch(request));
-        return;
+    // Skip non-GET and Firebase/Google APIs — always network
+    if (request.method !== 'GET') return;
+    if (url.hostname.includes('firebase') || url.hostname.includes('googleapis') || url.hostname.includes('gstatic')) {
+        return; // let browser handle
     }
+    if (url.protocol === 'chrome-extension:') return;
 
-    // Skip chrome extensions
-    if (url.protocol === 'chrome-extension:') {
-        return;
-    }
-
-    // Static assets - Cache first
-    if (STATIC_ASSETS.some(asset => request.url.includes(asset))) {
+    // Cache-first for static assets
+    if (STATIC_ASSETS.some(a => request.url.endsWith(a.replace('./', '')))) {
         event.respondWith(
-            caches.match(request).then((response) => {
-                return response || fetch(request).then((response) => {
-                    return caches.open(CACHE_STATIC).then((cache) => {
-                        cache.put(request, response.clone());
-                        return response;
-                    });
-                });
-            }).catch(() => {
-                return caches.match(request);
-            })
+            caches.match(request).then(cached => cached || fetchAndCache(request, STATIC_CACHE))
         );
         return;
     }
 
-    // Images - Cache with network fallback
+    // Images: cache with 24h TTL
     if (request.destination === 'image') {
         event.respondWith(
-            caches.match(request).then((response) => {
-                return response || fetch(request).then((response) => {
-                    return caches.open(CACHE_IMAGES).then((cache) => {
-                        cache.put(request, response.clone());
-                        return response;
-                    });
-                }).catch(() => {
-                    return new Response('Image not available offline', { status: 404 });
-                });
-            })
+            caches.match(request).then(cached => cached || fetchAndCache(request, DYNAMIC_CACHE))
         );
         return;
     }
 
-    // API calls - Network first
-    if (request.method === 'GET') {
-        event.respondWith(
-            fetch(request)
-                .then((response) => {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_DYNAMIC).then((cache) => {
-                        cache.put(request, responseClone);
-                    });
-                    return response;
-                })
-                .catch(() => {
-                    return caches.match(request) || new Response('Offline - data not available', {
-                        status: 503,
-                        statusText: 'Service Unavailable',
-                        headers: new Headers({ 'Content-Type': 'text/plain' })
-                    });
-                })
-        );
-        return;
-    }
-
-    // POST/PUT/DELETE - Network only
-    event.respondWith(fetch(request));
+    // Everything else: network-first
+    event.respondWith(
+        fetch(request)
+            .catch(() => caches.match(request))
+    );
 });
 
-// MESSAGE HANDLING - Support background sync
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
+async function fetchAndCache(request, cacheName) {
+    const response = await fetch(request);
+    if (response.ok) {
+        const cache = await caches.open(cacheName);
+        cache.put(request, response.clone());
     }
-});
-
-// PERIODIC BACKGROUND SYNC (optional)
-if ('periodicSync' in self.registration) {
-    self.addEventListener('periodicsync', (event) => {
-        if (event.tag === 'sync-messages') {
-            console.log('Background sync: Syncing messages...');
-            // Sync logic here
-        }
-    });
+    return response;
 }
 
-console.log('✓ Service Worker loaded');
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+console.log('✅ Service Worker v3 loaded');

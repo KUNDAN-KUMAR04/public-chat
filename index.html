@@ -1,78 +1,183 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0084ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Ultra Max Global</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="file-upload.css">
-    <link rel="stylesheet" href="active-users.css">
 </head>
 <body>
 
-<!-- LEVEL SELECTION GATE -->
-<div id="gate">
+<!-- ══════════════════════════════════════════════════════════════
+     GATE — Level selection
+══════════════════════════════════════════════════════════════ -->
+<div id="gate" role="dialog" aria-modal="true" aria-label="Select connection level">
     <div class="gate-content">
-        <h1>🌍 ULTRA MAX GLOBAL</h1>
-        <div class="tier" onclick="boot('MAX')">💎 MAX (5G/PC)</div>
-        <div class="tier" onclick="boot('SMART')">📱 SMART (4G)</div>
-        <div class="tier" onclick="boot('LITE')">⚡ LITE (3G/Jio)</div>
+        <div class="gate-logo">🌍</div>
+        <h1 class="gate-title">ULTRA MAX GLOBAL</h1>
+        <p class="gate-subtitle">Choose your connection speed</p>
+
+        <button class="tier tier-max" onclick="boot('MAX')">
+            <span class="tier-icon">💎</span>
+            <div class="tier-info">
+                <strong>MAX</strong>
+                <small>5G / WiFi — All features, all file types</small>
+            </div>
+        </button>
+
+        <button class="tier tier-smart" onclick="boot('SMART')">
+            <span class="tier-icon">📱</span>
+            <div class="tier-info">
+                <strong>SMART</strong>
+                <small>4G — Images, audio, PDFs</small>
+            </div>
+        </button>
+
+        <button class="tier tier-lite" onclick="boot('LITE')">
+            <span class="tier-icon">⚡</span>
+            <div class="tier-info">
+                <strong>LITE</strong>
+                <small>3G / Jio — Text &amp; images only</small>
+            </div>
+        </button>
     </div>
 </div>
 
-<!-- NAV -->
-<div class="nav" style="background:#fff; height:60px; display:flex; align-items:center; justify-content:space-between; padding:0 15px; border-bottom:1px solid #ddd;">
-    <b style="color:#0084ff">UM GLOBAL</b>
-    <div style="text-align:center;"><small>WIPES</small><br><b id="w-val">0</b></div>
-    <div style="display:flex; gap:15px; align-items:center;">
-        <button id="level-btn" style="background:#0084ff; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-weight:600; cursor:pointer; font-size:12px;">📱 MAX</button>
-        <div onclick="toggleSidebar()" style="font-size:25px; cursor:pointer;">📌</div>
+<!-- ══════════════════════════════════════════════════════════════
+     NAV BAR
+══════════════════════════════════════════════════════════════ -->
+<nav class="nav" role="navigation">
+    <div class="nav-left">
+        <span class="nav-logo">UM</span>
+        <span class="nav-name">GLOBAL</span>
     </div>
+
+    <div class="nav-center">
+        <span class="wipe-label">WIPES</span>
+        <strong id="w-val">0</strong>
+    </div>
+
+    <div class="nav-right">
+        <!-- Dark mode toggle injected by dark-mode.js -->
+        <button class="nav-icon-btn" onclick="openSearch()" title="Search messages (Ctrl+F)" aria-label="Search">🔍</button>
+        <button id="level-btn" class="level-btn" onclick="switchLevel()">💎 MAX</button>
+        <button id="sidebar-toggle" class="nav-icon-btn" onclick="toggleSidebar()" title="Pinned messages" aria-label="Toggle sidebar">📌</button>
+    </div>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SIDEBAR — Pinned messages
+══════════════════════════════════════════════════════════════ -->
+<aside id="side" class="sidebar" role="complementary" aria-label="Pinned messages">
+    <div class="sidebar-header">
+        <h3>📌 Pinned</h3>
+        <button class="sidebar-close" onclick="hideSidebar()" aria-label="Close sidebar">✕</button>
+    </div>
+    <hr>
+    <div id="pin-list" class="pin-list"></div>
+    <div class="sidebar-footer">
+        <button class="wipe-btn" onclick="wipeAllData()">🗑️ WIPE CHAT</button>
+    </div>
+</aside>
+<div id="sidebar-backdrop" class="sidebar-backdrop" onclick="hideSidebar()"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CHAT AREA
+══════════════════════════════════════════════════════════════ -->
+<main id="chat" class="chat" role="main" aria-live="polite" aria-label="Chat messages"></main>
+
+<!-- Typing indicator (injected by typing-indicator.js, placed after chat) -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     REPLY / EDIT TAG
+══════════════════════════════════════════════════════════════ -->
+<div id="r-tag" class="reply-tag" style="display:none" role="status">
+    <span class="reply-tag-icon">↩</span>
+    <span class="reply-tag-text"></span>
+    <button class="reply-tag-close" onclick="window.cancelReplyOrEdit()" aria-label="Cancel">✕</button>
 </div>
 
-<!-- SIDEBAR -->
-<div id="side" style="position:fixed; top:0; right:-320px; width:300px; height:100%; background:#fff; z-index:5000; transition:0.3s; padding:20px; box-shadow:-5px 0 15px rgba(0,0,0,0.1);">
-    <h3>📌 Special Box</h3><hr>
-    <div id="pin-list" style="height:60%; overflow-y:auto;"></div>
-    <button onclick="wipeAllData()" style="background:#ff3b30; color:#fff; width:100%; border:none; padding:12px; border-radius:8px; font-weight:600; cursor:pointer; margin-top:12px;">🗑️ WIPE CHAT</button>
+<!-- ══════════════════════════════════════════════════════════════
+     INPUT BAR
+══════════════════════════════════════════════════════════════ -->
+<div class="input-bar" role="form" aria-label="Send a message">
+    <!-- Color dot injected by user-colors.js before this -->
+    <input
+        id="u-in"
+        class="input-username"
+        type="text"
+        placeholder="Name"
+        maxlength="20"
+        autocomplete="nickname"
+        spellcheck="false"
+        aria-label="Your username"
+    >
+
+    <!-- File upload button -->
+    <label id="upload-btn" class="upload-btn" title="Attach file" aria-label="Attach file">
+        📎
+        <input type="file" id="f-in" style="display:none" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip">
+    </label>
+
+    <input
+        id="m-in"
+        class="input-message"
+        type="text"
+        placeholder="Message…"
+        autocomplete="off"
+        aria-label="Message text"
+    >
+
+    <button id="send-btn" class="send-btn" onclick="sendMessage()" aria-label="Send message">📤</button>
 </div>
 
-<!-- CHAT -->
-<div id="chat" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:12px; background:#e5ddd5;"></div>
+<!-- ══════════════════════════════════════════════════════════════
+     MEDIA PREVIEW POPUP
+══════════════════════════════════════════════════════════════ -->
+<div id="media-pop" class="media-popup" style="display:none" role="dialog" aria-modal="true" aria-label="Preview file before sending">
+    <div class="media-popup-inner">
+        <h3 class="media-popup-title">Preview &amp; Send</h3>
 
-<!-- MEDIA POPUP -->
-<div id="media-pop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; align-items:center; justify-content:center; padding:20px;">
-    <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
-        <h3 style="color:#fff;">Confirm Send</h3>
-        <img id="pop-img" src="" style="max-width:100%; max-height:60vh; border-radius:12px;">
-        <div style="display:flex; gap:15px;">
-            <button onclick="cancelUpload()" style="background:#444; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer;">Cancel</button>
-            <button id="upload-confirm-btn" onclick="confirmUpload()" style="background:#0084ff; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer;">Send</button>
+        <!-- Preview elements (shown/hidden based on file type) -->
+        <img     id="pop-img"  src="" alt="Preview" style="display:none">
+        <video   id="pop-vid"  controls style="display:none"></video>
+        <audio   id="pop-aud"  controls style="display:none"></audio>
+        <div     id="pop-file" class="pop-file-info" style="display:none"></div>
+
+        <!-- Upload progress bar -->
+        <div id="upload-progress-wrap" class="progress-wrap" style="display:none">
+            <div id="upload-progress-bar" class="progress-bar"></div>
+        </div>
+
+        <!-- Caption input -->
+        <input id="pop-caption" class="pop-caption" type="text" placeholder="Add a caption… (optional)">
+
+        <div class="media-popup-actions">
+            <button class="btn btn-cancel" onclick="cancelUpload()">Cancel</button>
+            <button id="upload-confirm-btn" class="btn btn-send" onclick="confirmUpload()">Send</button>
         </div>
     </div>
 </div>
 
-<!-- REPLY TAG -->
-<div id="r-tag" style="display:none; position:absolute; bottom:70px; left:10px; right:10px; background:#fff; padding:10px; border-radius:10px; border-left:5px solid #0084ff; z-index:100;"></div>
-
-<!-- INPUT BAR -->
-<div style="display:flex; align-items:flex-end; gap:8px; padding:8px; background:#fff; border-top:1px solid #ddd; flex-shrink:0;">
-    <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; background:none; text-align:center; font-weight:bold;">
-    <label style="font-size:24px; cursor:pointer;">📎<input type="file" id="f-in" style="display:none" accept="image/*,video/*,.pdf"></label>
-    <input id="m-in" type="text" placeholder="Message..." style="flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:20px; font-size:14px;">
-    <button onclick="sendMessage()" style="background:#0084ff; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">📤</button>
-</div>
-
-<!-- YOUR COMPLETE APP (All features in ONE file) -->
+<!-- ══════════════════════════════════════════════════════════════
+     SCRIPTS — Single entry point, ES module
+══════════════════════════════════════════════════════════════ -->
 <script type="module" src="app.js"></script>
 
-<!-- SUPPORTING FEATURES (Independent modules) -->
-<script type="module" src="emoji-support.js"></script>
-<script type="module" src="file-upload.js"></script>
-<script type="module" src="special-box.js"></script>
-<script type="module" src="active-users.js"></script>
-<script type="module" src="wipe-system.js"></script>
+<!-- Service Worker Registration -->
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW registered:', reg.scope))
+                .catch(err => console.log('SW failed:', err));
+        });
+    }
+</script>
 
 </body>
 </html>

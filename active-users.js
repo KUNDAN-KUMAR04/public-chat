@@ -1,109 +1,89 @@
 /**
- * 👥 ACTIVE USERS FEATURE
- * Shows active users online: Basic, Medium, Max, Ultra
- * EVERYTHING about active users in ONE file
+ * 👥 ACTIVE USERS — Real-time online count via Firestore presence
+ * (Fixes the fake localStorage-only count — now works across tabs/devices)
  */
 
-class ActiveUsersFeature {
-    constructor() {
-        this.userId = this.generateUserId();
-        this.init();
-    }
+import {
+    doc, setDoc, deleteDoc, onSnapshot, collection, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-    generateUserId() {
-        return 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-    }
+const SESSION_ID = 'session_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now();
+const STALE_MS   = 90_000; // 90 seconds — mark stale
 
-    init() {
-        this.createWidget();
-        this.startTracking();
-    }
+let heartbeatInterval = null;
+let unsubPresence     = null;
 
-    createWidget() {
-        const html = `
-            <div id="active-users-widget">
-                <span class="active-indicator"></span>
-                <span id="active-count">0</span>
-                <span class="active-label">Online</span>
-            </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', html);
-    }
+window.addEventListener('engine-booted', () => {
+    initPresence();
+});
 
-    startTracking() {
-        const updateCount = () => {
-            const count = this.getActiveCount();
-            const countEl = document.getElementById('active-count');
-            const indicator = document.querySelector('.active-indicator');
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function initPresence() {
+    const user  = document.getElementById('u-in')?.value || 'Guest';
+    const ref   = doc(window.db, 'presence', SESSION_ID);
 
-            if (countEl) {
-                countEl.textContent = count;
-            }
+    const payload = () => ({
+        user,
+        ts:    Date.now(),
+        mode:  window.engineMode
+    });
 
-            if (indicator) {
-                if (count <= 5) {
-                    indicator.className = 'active-indicator basic';
-                    indicator.title = 'BASIC (1-5 users)';
-                } else if (count <= 20) {
-                    indicator.className = 'active-indicator medium';
-                    indicator.title = 'MEDIUM (6-20 users)';
-                } else if (count <= 100) {
-                    indicator.className = 'active-indicator max';
-                    indicator.title = 'MAX (21-100 users)';
-                } else {
-                    indicator.className = 'active-indicator ultra';
-                    indicator.title = 'ULTRA (100+ users)';
-                }
-            }
-        };
+    // Write on load
+    await setDoc(ref, payload()).catch(() => {});
 
-        // Track this user
-        this.addUser();
-        
-        // Update every 30 seconds
-        setInterval(() => {
-            this.addUser();
-            updateCount();
-        }, 30000);
+    // Heartbeat every 30s
+    heartbeatInterval = setInterval(async () => {
+        const currentUser = document.getElementById('u-in')?.value || 'Guest';
+        await setDoc(ref, { ...payload(), user: currentUser }).catch(() => {});
+    }, 30_000);
 
-        // Initial update
-        updateCount();
-    }
+    // Subscribe to all presence docs
+    unsubPresence = onSnapshot(collection(window.db, 'presence'), (snap) => {
+        const now   = Date.now();
+        const alive = snap.docs.filter(d => {
+            const ts = d.data()?.ts;
+            return ts && (now - ts) < STALE_MS;
+        });
+        updateWidget(alive.length);
+    });
 
-    addUser() {
-        try {
-            const users = JSON.parse(localStorage.getItem('active_users') || '{}');
-            users[this.userId] = Date.now();
+    // Clean up on page leave
+    window.addEventListener('beforeunload', async () => {
+        clearInterval(heartbeatInterval);
+        if (unsubPresence) unsubPresence();
+        await deleteDoc(ref).catch(() => {});
+    });
 
-            // Remove inactive users (5 minutes)
-            const now = Date.now();
-            Object.keys(users).forEach(id => {
-                if (now - users[id] > 300000) {
-                    delete users[id];
-                }
-            });
-
-            localStorage.setItem('active_users', JSON.stringify(users));
-        } catch (e) {
-            console.log('User tracking not available');
+    // Visibility-based heartbeat pause
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            setDoc(ref, payload()).catch(() => {});
         }
-    }
-
-    getActiveCount() {
-        try {
-            const users = JSON.parse(localStorage.getItem('active_users') || '{}');
-            const now = Date.now();
-            
-            return Object.keys(users).filter(id => {
-                return (now - users[id]) < 300000;
-            }).length;
-        } catch (e) {
-            return 0;
-        }
-    }
+    });
 }
 
-// Initialize
-window.activeUsersFeature = new ActiveUsersFeature();
+// ── Widget ────────────────────────────────────────────────────────────────────
+function updateWidget(count) {
+    let widget = document.getElementById('active-users-widget');
+    if (!widget) {
+        widget = document.createElement('div');
+        widget.id = 'active-users-widget';
+        widget.className = 'active-users-widget';
+        document.body.appendChild(widget);
+    }
 
-console.log('✅ Active users module loaded');
+    const tier = count <= 5 ? { label:'BASIC', cls:'tier-basic' }
+               : count <= 20 ? { label:'MEDIUM', cls:'tier-medium' }
+               : count <= 100 ? { label:'MAX', cls:'tier-max' }
+               : { label:'ULTRA', cls:'tier-ultra' };
+
+    widget.className = `active-users-widget ${tier.cls}`;
+    widget.title     = `${tier.label} — ${count} online`;
+    widget.innerHTML = `
+        <span class="presence-dot"></span>
+        <span class="presence-count">${count}</span>
+        <span class="presence-label">online</span>
+    `;
+}
+
+console.log('✅ Active users module loaded (Firestore-based)');

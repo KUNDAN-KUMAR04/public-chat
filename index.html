@@ -3,125 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0084ff">
     <title>Ultra Max Global</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==">
     <link rel="stylesheet" href="style.css">
+    <!-- Feature Styles -->
+    <link rel="stylesheet" href="file-upload.css">
+    <link rel="stylesheet" href="active-users.css">
+    <style>
+        /* Gate styles */
+        #gate {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #0084ff 0%, #0066cc 100%);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: translateY(0);
+            transition: transform 0.8s ease;
+        }
+
+        .gate-content {
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        #gate h1 {
+            color: white;
+            margin-bottom: 40px;
+            font-size: 32px;
+        }
+
+        .tier {
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 20px;
+            margin: 12px 0;
+            border-radius: 12px;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .tier:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .tier:active {
+            transform: scale(0.98);
+        }
+
+        .tier small {
+            display: block;
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 6px;
+        }
+    </style>
 </head>
 <body>
 
     <!-- LEVEL SELECTION GATE -->
-    <div id="gate" class="gate-container">
+    <div id="gate">
         <div class="gate-content">
-            <h1 style="color:#fff; margin-bottom:40px; text-align:center; font-size:28px;">🌍 ULTRA MAX GLOBAL</h1>
-            <p style="color:rgba(255,255,255,0.8); text-align:center; margin-bottom:30px;">Select your connection level</p>
-            
-            <div class="tier" onclick="boot('MAX')">
-                <div style="font-size:32px; margin-bottom:10px;">💎</div>
-                <div style="font-weight:bold; margin-bottom:5px;">MAX LEVEL</div>
-                <small>PC / 5G / WiFi<br>Full HD, Heavy Caching</small>
-            </div>
-            
-            <div class="tier" onclick="boot('SMART')">
-                <div style="font-size:32px; margin-bottom:10px;">📱</div>
-                <div style="font-weight:bold; margin-bottom:5px;">SMART LEVEL</div>
-                <small>4G / LTE<br>Balanced Performance</small>
-            </div>
-            
-            <div class="tier" onclick="boot('LITE')">
-                <div style="font-size:32px; margin-bottom:10px;">⚡</div>
-                <div style="font-weight:bold; margin-bottom:5px;">LITE LEVEL</div>
-                <small>3G / 2G / JioPhone<br>Low RAM, Limited History</small>
-            </div>
+            <h1>🌍 ULTRA MAX GLOBAL</h1>
+            <div class="tier" onclick="boot('MAX')">💎 MAX (5G/PC)</div>
+            <div class="tier" onclick="boot('SMART')">📱 SMART (4G)</div>
+            <div class="tier" onclick="boot('LITE')">⚡ LITE (3G/Jio)</div>
         </div>
     </div>
 
-    <!-- HEADER NAV -->
-    <nav class="nav">
-        <div class="nav-left">
-            <span style="font-weight:bold; color:var(--p); font-size:18px;">UM GLOBAL</span>
-        </div>
-        <div class="nav-center">
-            <div style="text-align:center; font-size:12px;">
-                <div style="color:#999;">WIPES</div>
-                <div style="font-size:18px; font-weight:bold; color:var(--p);" id="w-val">0</div>
-            </div>
-        </div>
-        <div class="nav-right">
-            <button class="nav-btn" onclick="toggleSidebar()" title="Special Box">📌</button>
-        </div>
-    </nav>
-
-    <!-- SIDEBAR - SPECIAL BOX (PINNED MESSAGES) -->
-    <div id="side" class="sidebar">
-        <div class="sidebar-header">
-            <h3 style="margin:0; color:var(--p);">📌 Special Box</h3>
-            <button class="sidebar-close" onclick="hideSidebar()">✕</button>
-        </div>
-        <hr style="margin:15px 0; border:none; border-top:1px solid #ddd;">
-        
-        <div id="pin-list" class="pin-list"></div>
-        
-        <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px;">
-            <button class="action-btn" onclick="clearAllPinned()" style="width:100%; font-size:12px;">Clear Pins</button>
-            <button class="wipe-btn" onclick="wipeAllData()" style="width:100%; font-size:12px;">🗑️ Wipe Chat</button>
-        </div>
+    <!-- NAV -->
+    <div class="nav" style="background:#fff; height:60px; display:flex; align-items:center; justify-content:space-between; padding:0 15px; border-bottom:1px solid #ddd;">
+        <b style="color:#0084ff">UM GLOBAL</b>
+        <div class="nav-center" style="text-align:center;"><small>WIPES</small><br><b id="w-val">0</b></div>
+        <div onclick="toggleSidebar()" style="font-size:25px; cursor:pointer;">📌</div>
     </div>
 
-    <!-- MAIN CHAT AREA -->
-    <div id="chat" class="chat-container"></div>
+    <!-- SIDEBAR -->
+    <div id="side" style="position:fixed; top:0; right:-320px; width:300px; height:100%; background:#fff; z-index:5000; transition:0.3s; padding:20px; box-shadow:-5px 0 15px rgba(0,0,0,0.1);">
+        <h3>📌 Special Box</h3><hr>
+        <div id="pin-list" style="height:60%; overflow-y:auto;"></div>
+        <button class="wipe-btn" onclick="wipeAllData()" style="background:#ff3b30; color:#fff; width:100%; border:none; padding:12px; border-radius:8px; font-weight:600; cursor:pointer; margin-top:12px;">🗑️ WIPE CHAT</button>
+    </div>
 
-    <!-- MEDIA PREVIEW POPUP -->
-    <div id="media-pop" class="media-popup">
-        <div class="media-popup-content">
-            <h3 style="color:#fff; margin-top:0;">Confirm & Send</h3>
-            <img id="pop-img" src="" alt="Preview" class="popup-image">
-            <div class="pop-btn-row">
-                <button class="btn btn-cancel" onclick="cancelUpload()">Cancel</button>
-                <button class="btn btn-send" id="upload-confirm-btn" onclick="confirmUpload()">Send</button>
+    <!-- CHAT -->
+    <div id="chat" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:12px; background:#e5ddd5;"></div>
+
+    <!-- MEDIA POPUP -->
+    <div id="media-pop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+            <h3 style="color:#fff;">Confirm Send</h3>
+            <img id="pop-img" src="" style="max-width:100%; max-height:60vh; border-radius:12px; object-fit:contain;">
+            <div style="display:flex; gap:15px;">
+                <button id="cancel-btn" class="btn" onclick="cancelUpload()" style="background:#444; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer; font-weight:600;">Cancel</button>
+                <button id="upload-confirm-btn" class="btn" onclick="confirmUpload()" style="background:#0084ff; color:#fff; padding:12px 28px; border:none; border-radius:24px; cursor:pointer; font-weight:600;">Send</button>
             </div>
         </div>
     </div>
 
     <!-- REPLY TAG -->
-    <div id="r-tag" class="reply-tag"></div>
+    <div id="r-tag" style="display:none; position:absolute; bottom:70px; left:10px; right:10px; background:#fff; padding:10px; border-radius:10px; border-left:5px solid #0084ff; z-index:100;"></div>
 
-    <!-- MESSAGE INPUT BAR -->
-    <div class="input-bar">
-        <input 
-            id="u-in" 
-            type="text" 
-            placeholder="Username" 
-            class="input-username"
-            maxlength="20"
-            autocomplete="off"
-        >
-        
-        <label class="upload-btn" title="Upload Image/File">
-            📎
-            <input 
-                type="file" 
-                id="f-in" 
-                accept="image/*,video/*,.pdf"
-                style="display:none"
-            >
-        </label>
-        
-        <input 
-            id="m-in" 
-            type="text" 
-            placeholder="Type message..." 
-            class="input-message"
-            autocomplete="off"
-        >
-        
-        <button class="send-btn" onclick="sendMessage()" title="Send message">📤</button>
+    <!-- INPUT BAR -->
+    <div class="input-bar" style="display:flex; align-items:flex-end; gap:8px; padding:8px; background:#fff; border-top:1px solid #ddd; flex-shrink:0;">
+        <input id="u-in" type="text" placeholder="User" style="width:50px; border:none; background:none; text-align:center; font-weight:bold;">
+        <label style="font-size:24px; cursor:pointer;">📎<input type="file" id="f-in" style="display:none" accept="image/*,video/*,.pdf"></label>
+        <input id="m-in" type="text" placeholder="Message..." style="flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:20px; font-size:14px;">
+        <button class="send-btn" onclick="sendMessage()" style="background:#0084ff; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">📤</button>
     </div>
 
-    <!-- SCRIPTS -->
-    <script type="module" src="app.js"></script>
+    <!-- ===== FEATURE MODULES (Import in order) ===== -->
+    
+    <!-- 1. Core (Gate, Firebase, Boot) -->
+    <script type="module" src="core.js"></script>
+    
+    <!-- 2. Emoji Support (Load fonts first) -->
+    <script type="module" src="emoji-support.js"></script>
+    
+    <!-- 3. Messages (Send/display) -->
+    <script type="module" src="messages.js"></script>
+    
+    <!-- 4. File Upload (With loading indicator) -->
+    <script type="module" src="file-upload.js"></script>
+    
+    <!-- 5. Special Box (Sidebar, pinning) -->
+    <script type="module" src="special-box.js"></script>
+    
+    <!-- 6. Active Users (User counter) -->
+    <script type="module" src="active-users.js"></script>
+    
+    <!-- 7. Wipe System (Clear messages) -->
+    <script type="module" src="wipe-system.js"></script>
+
 </body>
 </html>

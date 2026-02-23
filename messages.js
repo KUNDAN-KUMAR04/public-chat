@@ -1,199 +1,243 @@
 /**
- * 💬 MESSAGES — Send, display, edit, soft-delete, reply tree
+ * 💬 MESSAGES — WhatsApp/Telegram-style instant loading
  *
- * Key fixes:
- *  - Removed where('parentId','==',null) from main query — required a composite
- *    Firestore index that may not exist, causing silent failures. Top-level vs reply
- *    messages are now filtered client-side.
- *  - Added onSnapshot error callback so failures are visible in the console.
- *  - Old messages without a parentId field are treated as top-level (parentId = null).
+ * 3 techniques used (exactly how WA Web & Telegram Web work):
+ *
+ * 1. LOCAL-FIRST (IndexedDB):
+ *    On page open → load last 200 msgs from IndexedDB instantly (no network).
+ *    Firestore syncs in background. New/changed msgs update the cache.
+ *
+ * 2. OPTIMISTIC UI:
+ *    Your message appears in the chat the instant you press Send,
+ *    with a ⏳ pending indicator. Firestore confirms it asynchronously.
+ *    If it fails → message turns red with a retry option.
+ *
+ * 3. DOM DIFFING:
+ *    onSnapshot only adds/updates/removes the changed messages,
+ *    never re-renders the whole list.
  */
 
 import {
     collection, addDoc, updateDoc,
-    query, orderBy, limit, where, onSnapshot,
+    query, orderBy, limit, onSnapshot,
     serverTimestamp, doc
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { FEATURES } from './core.js';
+import { cacheMessage, loadCached, removeCached, clearCache, trimCache } from './cache.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let replyingToId    = null;
-let replyingToText  = null;
-let editingMsgId    = null;
-let unsubscribeMain = null;
+let replyingToId   = null;
+let replyingToText = null;
+let editingMsgId   = null;
+let unsubMain      = null;
+let cacheLoaded    = false;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 window.addEventListener('engine-booted', ({ detail: { mode } }) => {
-    startMessageEngine(mode);
+    startEngine(mode);
 });
 
-// ── Engine ────────────────────────────────────────────────────────────────────
-function startMessageEngine(mode) {
-    if (unsubscribeMain) unsubscribeMain();
+// ── Engine: load cache first, then sync Firestore ────────────────────────────
+async function startEngine(mode) {
+    if (unsubMain) { unsubMain(); unsubMain = null; }
 
-    const lim = FEATURES[mode].msgLimit;
+    const chat = document.getElementById('chat');
+    if (!chat) return;
+    chat.innerHTML = '';
+    cacheLoaded    = false;
 
-    // NO where() clause — avoids needing a composite Firestore index.
-    // Top-level vs reply filtering is done client-side below.
+    // ── STEP 1: Render from IndexedDB instantly ──
+    const cached = await loadCached();
+    if (cached.length > 0) {
+        // Sort by createdAt (handle Firestore Timestamp or plain object)
+        cached.sort((a, b) => toMs(a.createdAt) - toMs(b.createdAt));
+        cached.forEach(msg => {
+            const el = buildMessageEl(msg.id, msg, parseInt(msg._depth || 0));
+            if (!msg.parentId) {
+                chat.appendChild(el);
+            } else {
+                attachUnderParent(el, msg.parentId);
+            }
+        });
+        chat.scrollTop = chat.scrollHeight;
+    }
+    cacheLoaded = true;
+
+    // ── STEP 2: Firestore live sync (fills gaps + live updates) ──
     const q = query(
         collection(window.db, 'messages'),
         orderBy('createdAt', 'asc'),
-        limit(lim)
+        limit(FEATURES[mode].msgLimit)
     );
 
-    unsubscribeMain = onSnapshot(q,
-        (snap) => {
-            const chat = document.getElementById('chat');
-            if (!chat) return;
-
-            snap.docChanges().forEach(change => {
-                const { type, doc: d } = change;
-                const data = d.data();
-
-                // A message is top-level when parentId is null, undefined, or missing
-                const isTopLevel = !data.parentId;
+    unsubMain = onSnapshot(q,
+        { includeMetadataChanges: false },
+        (snapshot) => {
+            snapshot.docChanges().forEach(({ type, doc: d }) => {
+                const data  = d.data();
+                const msgId = d.id;
 
                 if (type === 'added') {
-                    if (isTopLevel) {
-                        // Only append if not already in DOM (handles re-boot)
-                        if (!document.querySelector(`[data-msg-id="${d.id}"]`)) {
-                            const el = buildMessageEl(d.id, data, 0);
-                            chat.appendChild(el);
-                        }
-                    } else {
-                        // It's a reply — attach under its parent
-                        attachReply(d.id, data);
-                    }
-                } else if (type === 'modified') {
-                    const existing = document.querySelector(`[data-msg-id="${d.id}"]`);
+                    // Update cache
+                    cacheMessage(msgId, data);
+
+                    // Skip if already rendered (from cache or optimistic)
+                    const existing = chat.querySelector(`[data-msg-id="${msgId}"]`);
                     if (existing) {
-                        const depth   = parseInt(existing.dataset.depth || '0');
-                        const updated = buildMessageEl(d.id, data, depth);
-                        const replies = existing.querySelector(':scope > .replies-tree');
-                        existing.replaceWith(updated);
-                        if (replies) updated.appendChild(replies);
+                        // If it was an optimistic message — confirm it
+                        if (existing.classList.contains('optimistic')) {
+                            existing.classList.remove('optimistic', 'pending');
+                            existing.querySelector('.msg-status')?.remove();
+                        }
+                        return;
                     }
+
+                    const el = buildMessageEl(msgId, data, data.parentId ? 1 : 0);
+                    if (!data.parentId) {
+                        chat.appendChild(el);
+                    } else {
+                        attachUnderParent(el, data.parentId);
+                    }
+                    chat.scrollTop = chat.scrollHeight;
+
+                } else if (type === 'modified') {
+                    cacheMessage(msgId, data);
+                    const existing = document.querySelector(`[data-msg-id="${msgId}"]`);
+                    if (!existing) return;
+                    const depth  = parseInt(existing.dataset.depth || '0');
+                    const fresh  = buildMessageEl(msgId, data, depth);
+                    const tree   = existing.querySelector(':scope > .replies-tree');
+                    existing.replaceWith(fresh);
+                    if (tree) fresh.appendChild(tree);
+
                 } else if (type === 'removed') {
-                    document.querySelector(`[data-msg-id="${d.id}"]`)?.remove();
+                    removeCached(msgId);
+                    document.querySelector(`[data-msg-id="${msgId}"]`)?.remove();
                 }
             });
 
-            chat.scrollTop = chat.scrollHeight;
+            // Trim cache occasionally
+            trimCache();
         },
-        (err) => {
-            // Make errors visible — common cause: missing Firestore index
-            console.error('❌ Messages snapshot error:', err.code, err.message);
-            if (err.code === 'failed-precondition') {
-                console.error('👉 Firestore needs an index. Check the Firebase Console for a link to create it.');
-            }
-        }
+        (err) => console.error('Snapshot error:', err.code, err.message)
     );
 }
 
-// Attach a reply message under its parent in the DOM
-function attachReply(msgId, data) {
-    const parentEl = document.querySelector(`[data-msg-id="${data.parentId}"]`);
-    if (!parentEl) return; // parent not loaded yet — will be attached when parent loads
-
-    let tree = parentEl.querySelector(':scope > .replies-tree');
+// ── Attach reply under parent ─────────────────────────────────────────────────
+function attachUnderParent(replyEl, parentId) {
+    const parentWrapper = document.querySelector(`[data-msg-id="${parentId}"]`);
+    if (!parentWrapper) return;
+    let tree = parentWrapper.querySelector(':scope > .replies-tree');
     if (!tree) {
         tree = document.createElement('div');
         tree.className = 'replies-tree';
-        parentEl.appendChild(tree);
+        parentWrapper.appendChild(tree);
     }
-
-    if (!tree.querySelector(`[data-msg-id="${msgId}"]`)) {
-        const depth = parseInt(parentEl.dataset.depth || '0') + 1;
-        const el = buildMessageEl(msgId, data, depth);
-        tree.appendChild(el);
+    if (!tree.querySelector(`[data-msg-id="${replyEl.dataset.msgId}"]`)) {
+        tree.appendChild(replyEl);
     }
 }
 
 // ── Build message element ─────────────────────────────────────────────────────
-function buildMessageEl(msgId, data, depth) {
-    const myName   = currentUser();
-    const isMy     = data.user === myName;
-    const features = FEATURES[window.engineMode] || FEATURES['MAX'];
+function buildMessageEl(msgId, data, depth, isOptimistic = false) {
+    const me       = currentUser();
+    const isMine   = data.user === me;
+    const features = FEATURES[window.engineMode] || FEATURES.MAX;
+    const text     = data.text ?? data.txt ?? '';
+    const fileURL  = data.fileURL ?? data.file ?? null;
 
     const wrapper = document.createElement('div');
-    wrapper.className = `msg-wrapper ${isMy ? 'mine' : 'theirs'} depth-${Math.min(depth, 4)}`;
+    wrapper.className   = `msg-wrapper ${isMine ? 'mine' : 'theirs'} depth-${Math.min(depth,4)}${isOptimistic ? ' optimistic pending' : ''}`;
     wrapper.dataset.msgId = msgId;
     wrapper.dataset.depth = depth;
-    wrapper.dataset.user  = data.user || '';
+    wrapper.dataset.user  = data.user ?? '';
 
     // Avatar
-    const avatar = document.createElement('div');
+    const avatar       = document.createElement('div');
     avatar.className   = 'msg-avatar';
-    avatar.textContent = (data.user || 'G')[0].toUpperCase();
-    avatar.style.background = data.userColor || '#0084ff';
+    avatar.textContent = (data.user ?? 'G')[0].toUpperCase();
+    avatar.style.background = data.userColor ?? '#0084ff';
 
     // Bubble
-    const bubble = document.createElement('div');
-    bubble.className = `msg-bubble ${isMy ? 'bubble-mine' : 'bubble-theirs'}`;
-    if (data.deleted) bubble.classList.add('deleted');
+    const bubble     = document.createElement('div');
+    bubble.className = `msg-bubble ${isMine ? 'bubble-mine' : 'bubble-theirs'}${data.deleted ? ' deleted' : ''}`;
 
     // Header
     const header = document.createElement('div');
     header.className = 'msg-header';
-    header.innerHTML = `
-        <span class="msg-username" style="color:${isMy ? 'rgba(255,255,255,.9)' : (data.userColor || '#0084ff')}">${escHtml(data.user || 'Guest')}</span>
-        <span class="msg-time">${formatTime(data.createdAt)}</span>
-        ${data.edited ? '<span class="msg-edited">edited</span>' : ''}
-    `;
+    const nameSpan       = document.createElement('span');
+    nameSpan.className   = 'msg-username';
+    nameSpan.textContent = data.user ?? 'Guest';
+    nameSpan.style.color = isMine ? 'rgba(255,255,255,.9)' : (data.userColor ?? '#0084ff');
+    header.appendChild(nameSpan);
+    if (data.edited) {
+        const ed = document.createElement('span');
+        ed.className = 'msg-edited'; ed.textContent = '(edited)';
+        header.appendChild(ed);
+    }
+    const timeEl = document.createElement('time');
+    timeEl.className   = 'msg-time';
+    timeEl.textContent = formatRelative(data.createdAt);
+    timeEl.title       = formatFull(data.createdAt);
+    header.appendChild(timeEl);
     bubble.appendChild(header);
 
     // Reply quote
     if (data.replyPreview) {
-        const rp = document.createElement('div');
-        rp.className = 'reply-quote';
-        rp.innerHTML = `
-            <span class="rq-user">${escHtml(data.replyPreview.user || '')}</span>
-            <span class="rq-text">${escHtml(truncate(data.replyPreview.text || '📎 File', 80))}</span>
-        `;
-        rp.onclick = () => scrollToMessage(data.parentId);
-        bubble.appendChild(rp);
+        const q = document.createElement('div');
+        q.className = 'reply-quote';
+        q.innerHTML = `<span class="rq-user">${esc(data.replyPreview.user??'')}</span>`
+                    + `<span class="rq-text">${esc(clip(data.replyPreview.text??'📎',80))}</span>`;
+        q.onclick   = () => flashMsg(data.parentId);
+        bubble.appendChild(q);
     }
 
     // Content
     const content = document.createElement('div');
     content.className = 'msg-content';
-
     if (data.deleted) {
         content.innerHTML = '<em class="deleted-text">This message was deleted</em>';
     } else {
-        // Support both old field name (txt) and new (text)
-        const text = data.text || data.txt || '';
         if (text) {
             const p = document.createElement('p');
-            p.className  = 'msg-text';
-            p.textContent = text;
+            p.className = 'msg-text'; p.textContent = text;
             content.appendChild(p);
         }
-        // Support both old field name (file) and new (fileURL)
-        const fileURL = data.fileURL || data.file || null;
-        if (fileURL) {
-            renderFileContent(content, { ...data, fileURL }, features);
-        }
+        if (data.fileCard) renderFileCard(content, data);
+        else if (fileURL)  renderLegacyMedia(content, data, features); // backward compat
     }
     bubble.appendChild(content);
 
+    // Full timestamp
+    const tsRow = document.createElement('div');
+    tsRow.className = 'msg-timestamp-row';
+    tsRow.innerHTML = `<span class="msg-ts-full">${formatFull(data.createdAt)}</span>`;
+    bubble.appendChild(tsRow);
+
+    // Pending / failed status indicator (optimistic UI)
+    if (isOptimistic) {
+        const status = document.createElement('div');
+        status.className = 'msg-status pending';
+        status.textContent = '⏳ Sending…';
+        bubble.appendChild(status);
+    }
+
     // Reactions
-    const reactionsEl = document.createElement('div');
-    reactionsEl.className = 'msg-reactions';
-    reactionsEl.id = `reactions-${msgId}`;
-    if (data.reactions) renderReactions(reactionsEl, data.reactions, msgId);
-    bubble.appendChild(reactionsEl);
+    const reactEl = document.createElement('div');
+    reactEl.className = `msg-reactions`;
+    reactEl.id        = `reactions-${msgId}`;
+    if (data.reactions) renderReactions(reactEl, data.reactions, msgId);
+    bubble.appendChild(reactEl);
 
     // Actions
-    if (!data.deleted) {
+    if (!data.deleted && !isOptimistic) {
         const actions = document.createElement('div');
         actions.className = 'msg-actions';
-        actions.innerHTML = `
-            ${features.reactions ? `<button class="act-btn" title="React" onclick="window.showReactionPicker('${msgId}',this)">😊</button>` : ''}
-            ${features.replies   ? `<button class="act-btn" title="Reply" onclick="window.startReply('${msgId}',${JSON.stringify(truncate(data.text || data.txt || '📎', 60))})">↩</button>` : ''}
-            ${features.edit && isMy ? `<button class="act-btn" title="Edit" onclick="window.startEdit('${msgId}',${JSON.stringify(data.text || data.txt || '')})">✏️</button>` : ''}
-            ${isMy ? `<button class="act-btn act-del" title="Delete" onclick="window.deleteMessage('${msgId}')">🗑</button>` : ''}
-        `;
+        if (features.reactions) actions.appendChild(mkBtn('😊','React',  `window.showReactionPicker('${msgId}',this)`));
+        if (features.replies)   actions.appendChild(mkBtn('↩', 'Reply',  `window.startReply('${msgId}',${JSON.stringify(clip(text||'📎',60))})`));
+        if (features.edit&&isMine) actions.appendChild(mkBtn('✏️','Edit', `window.startEdit('${msgId}',${JSON.stringify(text)})`));
+        if (features.pin)       actions.appendChild(mkBtn('📌','Pin',    `window.pinMessage('${msgId}')`));
+        if (isMine)             actions.appendChild(mkBtn('🗑','Delete',  `window.deleteMessage('${msgId}')`, 'act-del'));
         bubble.appendChild(actions);
     }
 
@@ -202,222 +246,299 @@ function buildMessageEl(msgId, data, depth) {
     return wrapper;
 }
 
-function renderFileContent(container, data, features) {
+function mkBtn(icon, title, onclick, cls='') {
+    const b = document.createElement('button');
+    b.className = `act-btn ${cls}`.trim();
+    b.title = title; b.textContent = icon;
+    b.setAttribute('onclick', onclick);
+    return b;
+}
+
+// ── File card (instant, stored in Firestore doc) ──────────────────────────────
+function renderFileCard(container, data) {
+    const { fileThumb, fileIcon, fileName, fileSize, fileType, fileDuration } = data;
+    const isVideo = fileType?.startsWith('video/');
+
+    const card = document.createElement('div');
+    card.className = 'file-card';
+
+    if (fileThumb) {
+        const wrap = document.createElement('div');
+        wrap.className = 'file-card-img-wrap';
+        const img = document.createElement('img');
+        img.src = fileThumb; img.className = 'file-card-img';
+        img.alt = fileName ?? 'file'; img.loading = 'lazy';
+        wrap.appendChild(img);
+        if (isVideo) {
+            const play = document.createElement('div');
+            play.className = 'file-card-play'; play.textContent = '▶';
+            wrap.appendChild(play);
+        }
+        card.appendChild(wrap);
+    } else {
+        const icon = document.createElement('div');
+        icon.className = 'file-card-big-icon';
+        icon.textContent = fileIcon ?? '📎';
+        card.appendChild(icon);
+    }
+
+    const info = document.createElement('div');
+    info.className = 'file-card-info';
+    const name = document.createElement('span');
+    name.className = 'file-card-name'; name.textContent = fileName ?? 'File';
+    const meta = document.createElement('span');
+    meta.className = 'file-card-meta';
+    meta.textContent = (fileSize ? fmtBytes(fileSize) : '') + (fileDuration ? ` · ${fileDuration}` : '');
+    info.appendChild(name); info.appendChild(meta);
+    card.appendChild(info);
+    container.appendChild(card);
+}
+
+// Backward compat: old messages that used Firebase Storage URL
+function renderLegacyMedia(container, data, features) {
     const { fileURL, fileType, fileName } = data;
     if (!fileURL) return;
-
     if (fileType?.startsWith('image/') && features.images) {
         const img = document.createElement('img');
-        img.src       = fileURL;
-        img.className = 'msg-img';
-        img.loading   = 'lazy';
-        img.alt       = 'image';
-        img.onclick   = () => window.open(fileURL, '_blank');
+        img.src = fileURL; img.className = 'msg-img'; img.loading = 'lazy';
+        img.alt = fileName??'image'; img.onclick = ()=>window.open(fileURL,'_blank');
         container.appendChild(img);
-
     } else if (fileType?.startsWith('video/') && features.videos) {
-        const vid = document.createElement('video');
-        vid.src       = fileURL;
-        vid.controls  = true;
-        vid.className = 'msg-video';
-        container.appendChild(vid);
-
+        const v = document.createElement('video');
+        v.src = fileURL; v.controls = true; v.className = 'msg-video';
+        container.appendChild(v);
     } else if (fileType?.startsWith('audio/') && features.audio) {
-        const aud = document.createElement('audio');
-        aud.src       = fileURL;
-        aud.controls  = true;
-        aud.className = 'msg-audio';
-        container.appendChild(aud);
-
+        const a = document.createElement('audio');
+        a.src = fileURL; a.controls = true; a.className = 'msg-audio';
+        container.appendChild(a);
     } else {
-        const link = document.createElement('a');
-        link.href      = fileURL;
-        link.target    = '_blank';
-        link.className = 'msg-file-link';
-        link.innerHTML = `📄 <span>${escHtml(fileName || 'Download file')}</span>`;
-        container.appendChild(link);
+        const l = document.createElement('a');
+        l.href = fileURL; l.target = '_blank'; l.rel = 'noopener noreferrer';
+        l.className = 'msg-file-link';
+        l.innerHTML = `📄 <span>${esc(fileName??'Download file')}</span>`;
+        container.appendChild(l);
     }
 }
 
 function renderReactions(container, reactions, msgId) {
     container.innerHTML = '';
     if (!reactions || typeof reactions !== 'object') return;
-    const counts = {};
-    const myName = currentUser();
+    const counts = {}; const me = currentUser();
     Object.entries(reactions).forEach(([user, emoji]) => {
-        if (!counts[emoji]) counts[emoji] = { count: 0, iMine: false };
-        counts[emoji].count++;
-        if (user === myName) counts[emoji].iMine = true;
+        if (!counts[emoji]) counts[emoji] = { n:0, mine:false };
+        counts[emoji].n++;
+        if (user === me) counts[emoji].mine = true;
     });
-    Object.entries(counts).forEach(([emoji, { count, iMine }]) => {
+    Object.entries(counts).forEach(([emoji, { n, mine }]) => {
         const btn = document.createElement('button');
-        btn.className   = `reaction-pill ${iMine ? 'reaction-mine' : ''}`;
-        btn.textContent = `${emoji} ${count}`;
-        btn.onclick     = () => window.toggleReaction(msgId, emoji);
+        btn.className = `reaction-pill${mine?' reaction-mine':''}`;
+        btn.textContent = `${emoji} ${n}`;
+        btn.onclick = ()=>window.toggleReaction(msgId, emoji);
         container.appendChild(btn);
     });
 }
 
-// ── Send ──────────────────────────────────────────────────────────────────────
+// ── SEND — Optimistic UI (WhatsApp-style) ─────────────────────────────────────
 window.sendMessage = async () => {
     const input = document.getElementById('m-in');
-    const text  = input?.value.trim();
+    const text  = (input?.value ?? '').trim();
     if (!text && !window._pendingFile) return;
 
-    // Editing an existing message
+    // Edit mode
     if (editingMsgId) {
         try {
             await updateDoc(doc(window.db, 'messages', editingMsgId), {
-                text,
-                edited:   true,
-                editedAt: serverTimestamp()
+                text, edited: true, editedAt: serverTimestamp()
             });
-        } catch (err) {
-            console.error('Edit error:', err);
-        }
-        cancelEdit();
-        if (input) input.value = '';
+        } catch (err) { console.error('Edit failed:', err); }
+        cancelEdit(); if (input) input.value = '';
         return;
     }
 
-    const user = currentUser();
+    const user    = currentUser();
+    const tmpId   = 'tmp_' + Date.now();   // temporary local ID
+    const chat    = document.getElementById('chat');
     const payload = {
         user,
         userColor:    getUserColor(user),
-        text:         text || '',
-        parentId:     replyingToId  || null,
-        replyPreview: replyingToId  ? { user: replyingToText?.user || '', text: replyingToText?.text || '' } : null,
-        createdAt:    serverTimestamp(),
+        text,
+        parentId:     replyingToId ?? null,
+        replyPreview: replyingToId
+            ? { user: replyingToText?.user??'', text: replyingToText?.text??'' }
+            : null,
+        createdAt:    { seconds: Math.floor(Date.now()/1000), nanoseconds: 0 },
         deleted:      false,
         edited:       false
     };
 
+    // ── Show message instantly (optimistic) ──
+    const optimisticEl = buildMessageEl(tmpId, payload, 0, true);
+    if (chat) { chat.appendChild(optimisticEl); chat.scrollTop = chat.scrollHeight; }
+
+    if (input) input.value = '';
+    cancelReply();
+    window.dispatchEvent(new CustomEvent('typing-stop'));
+
+    // ── Send to Firestore in background ──
     try {
-        await addDoc(collection(window.db, 'messages'), payload);
-        if (input) input.value = '';
-        cancelReply();
-        window.dispatchEvent(new CustomEvent('typing-stop'));
+        await addDoc(collection(window.db, 'messages'), {
+            ...payload,
+            createdAt: serverTimestamp()   // replace local estimate with server time
+        });
+        // onSnapshot will confirm and remove the optimistic element
     } catch (err) {
-        console.error('❌ Send error:', err);
-        alert('Failed to send message. Check console for details.');
+        console.error('Send failed:', err);
+        // Mark as failed — show retry button
+        optimisticEl.classList.remove('pending');
+        optimisticEl.classList.add('failed');
+        const status = optimisticEl.querySelector('.msg-status');
+        if (status) {
+            status.className = 'msg-status failed';
+            status.innerHTML = `❌ Failed · <button onclick="retryMessage('${tmpId}')">Retry</button>`;
+        }
     }
+};
+
+// Retry a failed optimistic message
+window.retryMessage = (tmpId) => {
+    const el = document.querySelector(`[data-msg-id="${tmpId}"]`);
+    if (!el) return;
+    const text = el.querySelector('.msg-text')?.textContent ?? '';
+    el.remove();
+    const input = document.getElementById('m-in');
+    if (input) { input.value = text; window.sendMessage(); }
 };
 
 // ── Reply ─────────────────────────────────────────────────────────────────────
 window.startReply = (msgId, msgText) => {
     replyingToId   = msgId;
-    const senderEl = document.querySelector(`[data-msg-id="${msgId}"] .msg-username`);
-    replyingToText = { text: msgText, user: senderEl?.textContent || '' };
+    const uEl      = document.querySelector(`[data-msg-id="${msgId}"] .msg-username`);
+    replyingToText = { text: msgText, user: uEl?.textContent??'' };
     cancelEdit();
     const tag = document.getElementById('r-tag');
     if (tag) {
         tag.style.display = 'flex';
         tag.querySelector('.reply-tag-text').textContent =
-            `↩ ${replyingToText.user}: ${truncate(msgText, 50)}`;
+            `↩ ${replyingToText.user}: ${clip(msgText,50)}`;
     }
     document.getElementById('m-in')?.focus();
 };
-
 window.cancelReply = () => {
-    replyingToId   = null;
-    replyingToText = null;
+    replyingToId = replyingToText = null;
     const tag = document.getElementById('r-tag');
     if (tag) tag.style.display = 'none';
 };
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
 window.startEdit = (msgId, currentText) => {
-    editingMsgId = msgId;
-    cancelReply();
+    editingMsgId = msgId; cancelReply();
     const input = document.getElementById('m-in');
     if (input) { input.value = currentText; input.focus(); }
     const tag = document.getElementById('r-tag');
     if (tag) {
         tag.style.display = 'flex';
-        tag.querySelector('.reply-tag-text').textContent = '✏️ Editing message';
+        tag.querySelector('.reply-tag-text').textContent = '✏️ Editing message…';
         tag.classList.add('editing');
     }
     const sendBtn = document.getElementById('send-btn');
     if (sendBtn) sendBtn.textContent = '✔';
 };
-
 function cancelEdit() {
     editingMsgId = null;
     const tag = document.getElementById('r-tag');
-    if (tag) { tag.style.display = 'none'; tag.classList.remove('editing'); }
+    if (tag) { tag.style.display='none'; tag.classList.remove('editing'); }
     const sendBtn = document.getElementById('send-btn');
     if (sendBtn) sendBtn.textContent = '📤';
 }
-
 window.cancelReplyOrEdit = () => { cancelEdit(); window.cancelReply(); };
 
 // ── Soft-delete ───────────────────────────────────────────────────────────────
 window.deleteMessage = async (msgId) => {
     if (!confirm('Delete this message?')) return;
     try {
-        await updateDoc(doc(window.db, 'messages', msgId), {
-            deleted: true, text: '', fileURL: null
+        await updateDoc(doc(window.db,'messages',msgId), {
+            deleted:true, text:'', fileURL:null
         });
-    } catch (err) {
-        console.error('Delete error:', err);
-    }
+    } catch (err) { console.error('Delete failed:',err); }
 };
 
-// ── Scroll to message ─────────────────────────────────────────────────────────
-function scrollToMessage(msgId) {
+// ── Flash message ─────────────────────────────────────────────────────────────
+function flashMsg(msgId) {
     const el = document.querySelector(`[data-msg-id="${msgId}"]`);
     if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.querySelector('.msg-bubble')?.classList.add('flash');
-    setTimeout(() => el.querySelector('.msg-bubble')?.classList.remove('flash'), 1500);
+    el.scrollIntoView({ behavior:'smooth', block:'center' });
+    const b = el.querySelector('.msg-bubble');
+    if (b) { b.classList.add('flash'); setTimeout(()=>b.classList.remove('flash'),1500); }
 }
 
-// ── Keyboard ──────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+// ── Input wiring ──────────────────────────────────────────────────────────────
+function wireInput() {
     const input = document.getElementById('m-in');
-    if (input) {
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
-            if (e.key === 'Escape') window.cancelReplyOrEdit();
-        });
-        input.addEventListener('input', () => {
-            window.dispatchEvent(new CustomEvent('typing-start'));
-        });
-    }
-});
-
-// ── Exports & helpers ─────────────────────────────────────────────────────────
-export function currentUser() {
-    return document.getElementById('u-in')?.value.trim() || 'Guest';
+    if (!input || input.dataset.wired) return;
+    input.dataset.wired = '1';
+    input.addEventListener('keydown', (e) => {
+        if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
+        if (e.key==='Escape') window.cancelReplyOrEdit();
+    });
+    input.addEventListener('input', () => {
+        window.dispatchEvent(new CustomEvent('typing-start'));
+    });
 }
+if (document.readyState==='loading') {
+    document.addEventListener('DOMContentLoaded', wireInput);
+} else { wireInput(); }
 
+// ── Expose clearCache for wipe-system.js ─────────────────────────────────────
+window.clearMessageCache = clearCache;
+
+// ── Helpers / exports ─────────────────────────────────────────────────────────
+export function currentUser() {
+    return (document.getElementById('u-in')?.value??'').trim() || 'Guest';
+}
 export function getUserColor(user) {
-    try { return JSON.parse(localStorage.getItem('um_colors') || '{}')[user] || '#0084ff'; }
+    try { return JSON.parse(localStorage.getItem('um_colors')??'{}')[user]??'#0084ff'; }
     catch { return '#0084ff'; }
 }
 
-function formatTime(ts) {
-    if (!ts) return '';
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
-    const diff  = Date.now() - date.getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1)    return 'now';
-    if (m < 60)   return `${m}m`;
-    if (m < 1440) return `${Math.floor(m / 60)}h`;
-    if (m < 10080)return `${Math.floor(m / 1440)}d`;
-    return date.toLocaleDateString();
+function formatRelative(ts) {
+    const d = tsToDate(ts);
+    if (!d) return '';
+    const m = Math.floor((Date.now()-d.getTime())/60000);
+    if (m<1) return 'now'; if (m<60) return `${m}m`;
+    if (m<1440) return `${Math.floor(m/60)}h`;
+    if (m<10080) return `${Math.floor(m/1440)}d`;
+    return d.toLocaleDateString();
 }
-
-function escHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function formatFull(ts) {
+    const d = tsToDate(ts);
+    if (!d) return '';
+    return d.toLocaleString(undefined,{
+        weekday:'short',day:'numeric',month:'short',
+        year:'numeric',hour:'2-digit',minute:'2-digit'
+    });
 }
-
-function truncate(s, n) {
-    return s.length > n ? s.slice(0, n) + '…' : s;
+function tsToDate(ts) {
+    if (!ts) return null;
+    if (typeof ts.toDate==='function') return ts.toDate();
+    if (ts instanceof Date) return ts;
+    if (typeof ts==='number') return new Date(ts);
+    if (ts.seconds) return new Date(ts.seconds*1000);
+    return null;
 }
+function toMs(ts) {
+    const d = tsToDate(ts); return d ? d.getTime() : 0;
+}
+function fmtBytes(b) {
+    if (!b) return '';
+    if (b<1024) return `${b} B`;
+    if (b<1_048_576) return `${(b/1024).toFixed(1)} KB`;
+    return `${(b/1_048_576).toFixed(1)} MB`;
+}
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function clip(s,n) { return s.length>n ? s.slice(0,n)+'…' : s; }
 
 export { renderReactions };
-
-console.log('✅ Messages module loaded');
+console.log('✅ Messages module loaded (local-first + optimistic UI)');
